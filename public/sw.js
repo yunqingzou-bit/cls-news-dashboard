@@ -1,6 +1,6 @@
 'use strict';
 
-const CACHE = 'cls-top20-v1';
+const CACHE = 'cls-top20-v2';
 const SHELL = ['./', './top20.json', './manifest.webmanifest', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', function (event) {

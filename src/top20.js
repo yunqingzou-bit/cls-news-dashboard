@@ -52,6 +52,23 @@ const TOPIC_RULES = [
   [['军工', '军贸', '武器'], '国防军工'],
 ];
 
+const TOPIC_FALLBACKS = {
+  '脑机接口': [['新里程', 'sz002219'], ['日盈电子', 'sh603286'], ['机器人', 'sz300024']],
+  '空间智能': [['中兴通讯', 'sz000063'], ['深南电路', 'sz002916'], ['广哈通信', 'sz300711']],
+  'AI算力': [['中际旭创', 'sz300308'], ['新易盛', 'sz300502'], ['浪潮信息', 'sz000977']],
+  '高速光通信': [['剑桥科技', 'sh603083'], ['太辰光', 'sz300570'], ['新易盛', 'sz300502']],
+  'AI硬件材料': [['方邦股份', 'sz688020'], ['铜冠铜箔', 'sz301217'], ['深南电路', 'sz002916']],
+  'MLCC与模拟芯片': [['圣邦股份', 'sz300661'], ['思瑞浦', 'sh688536'], ['艾华集团', 'sh603989']],
+  'AI液冷': [['英维克', 'sz002837'], ['申菱环境', 'sz301018'], ['高澜股份', 'sz300499']],
+  'AI安全': [['启明星辰', 'sz002439'], ['深信服', 'sz300454'], ['安恒信息', 'sh688023']],
+  '人形机器人': [['绿的谐波', 'sh688017'], ['拓普集团', 'sh601689'], ['三花智控', 'sz002050']],
+  '半导体材料': [['雅克科技', 'sz002409'], ['沪硅产业', 'sh688126'], ['有研新材', 'sh600206']],
+  '新能源': [['阳光电源', 'sz300274'], ['宁德时代', 'sz300750'], ['亿纬锂能', 'sz300014']],
+  '工业自动化': [['汇川技术', 'sz300124'], ['海天精工', 'sh601882'], ['埃斯顿', 'sz002747']],
+  '国防军工': [['中航沈飞', 'sh600760'], ['中航光电', 'sz002179'], ['长城军工', 'sh601606']],
+  '其他产业与市场': [['中信证券', 'sh600030'], ['比亚迪', 'sz002594'], ['中国平安', 'sh601318']],
+};
+
 function clean(s) {
   return String(s || '').replace(/\s+/g, ' ').trim();
 }
@@ -112,6 +129,48 @@ function mentionedStocks(text, universe) {
     .slice(0, 12);
 }
 
+function parseStock(value) {
+  const m = /^(.+?)\(((?:sh|sz)\d{6})\)$/.exec(clean(value));
+  return m ? { name: m[1], code: m[2] } : { name: clean(value), code: '' };
+}
+
+function companyRelation(name, titleText, allText, explicit) {
+  if (titleText.includes(name)) return { relevance: '高', relation: '标题提及', reason: '新闻标题直接提及' };
+  if (allText.includes(name)) return { relevance: '高', relation: '正文提及', reason: '新闻摘要或正文直接提及' };
+  if (explicit) return { relevance: '中', relation: '财联社关联', reason: '财联社新闻关联股票字段' };
+  return { relevance: '中', relation: '产业链映射', reason: '与新闻主题处于同一产业链，需后续验证' };
+}
+
+function buildRelatedCompanies(group, titleText, allText, topic, universe) {
+  const out = [];
+  const seen = new Set();
+  function add(name, code, explicit) {
+    name = clean(name);
+    code = clean(code);
+    if (!name || seen.has(name)) return;
+    const rel = companyRelation(name, titleText, allText, explicit);
+    seen.add(name);
+    out.push({ name, code, relevance: rel.relevance, relation: rel.relation, reason: rel.reason });
+  }
+  const explicitRows = group.slice().sort((a, b) => Math.abs(Number(b.changePct || 0)) - Math.abs(Number(a.changePct || 0)));
+  for (const row of explicitRows) {
+    const parsed = parseStock(row.stockName || row.stock || '');
+    add(parsed.name, row.stockCode || parsed.code, true);
+    if (out.length >= 6) break;
+  }
+  if (out.length < 3) {
+    for (const s of mentionedStocks(allText, universe)) {
+      add(s.name, s.code, false);
+      if (out.length >= 6) break;
+    }
+  }
+  for (const pair of TOPIC_FALLBACKS[topic] || TOPIC_FALLBACKS['其他产业与市场']) {
+    if (out.length >= 3) break;
+    add(pair[0], pair[1], false);
+  }
+  return out.slice(0, 6);
+}
+
 function curate(rows, options = {}) {
   const days = Number(options.days || 3);
   const cutoff = Math.floor(Date.now() / 1000) - days * 86400;
@@ -139,6 +198,8 @@ function curate(rows, options = {}) {
       stocks = mentions.map((s) => clean(`${s.name}(${s.code})`));
       stockCodes = mentions.map((s) => clean(s.code));
     }
+    const topic = topicOf(titleText);
+    const relatedCompanies = buildRelatedCompanies(group, titleText, allText, topic, stockUniverse);
     const maxChange = stockRows.reduce((max, r) => Math.max(max, Number(r.changePct || 0)), null);
     const prefixWeight = PREFIX_WEIGHT[first.prefix] || 5;
     const breadth = Math.min(stocks.length, 12) * 0.8;
@@ -158,9 +219,10 @@ function curate(rows, options = {}) {
       summary: clean(first.text || first.brief || first.title),
       stocks: stocks.slice(0, 12),
       stockCodes: stockCodes.slice(0, 12),
-      stockCount: stocks.length,
+      stockCount: Math.max(stocks.length, relatedCompanies.length),
+      relatedCompanies,
       url: first.url || `https://www.cls.cn/detail/${first.articleId || first.id}`,
-      topic: topicOf(titleText),
+      topic,
       siteCategory: first.siteCategory || first.prefix || '',
       level: first.level || '',
       readingNum: Number(first.readingNum || 0),
@@ -185,6 +247,7 @@ function write(rows, meta, options = {}) {
     days,
     limit: options.limit || 20,
     stockUniverse: options.stockUniverse || [],
+    sourceMode: options.sourceMode || '',
     sourceMode: options.sourceMode || '',
   });
   const from = new Date(Date.now() - days * 86400000).toLocaleDateString('zh-CN', { timeZone: 'Asia/Shanghai' });

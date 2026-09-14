@@ -1,4 +1,4 @@
-# 财联社 沪深A股 · 栏目新闻实时盯盘
+# 财联社全站深度新闻 · 精选20条影响看板
 
 > ### 📱 手机随时看：<https://yunqingzou-bit.github.io/cls-news-dashboard/>
 >
@@ -9,7 +9,7 @@
 > ⚠️ 别和代码仓库搞混：`github.com/yunqingzou-bit/cls-news-dashboard` 是**源码**，
 > `yunqingzou-bit.github.io/cls-news-dashboard` 才是**网站**。
 
-把**在上海证券交易所与深圳证券交易所上市的全部股票**（约 5200 只）里，命中《盘中宝》《风口研报》《电报解读》《财联社早知道》《数据研选》《九点特供》《公告全知道》《解读龙虎榜》等栏目前缀的个股新闻（默认回溯 7 天）抓下来，输出成**一张合并表格**，并提供一个打开就能实时看的本地面板。
+默认从财联社深度页的全分类接口抓取新闻（头条、股市、港股、环球、公司、券商、基金、地产、金融、汽车、科创、创业板、品见、期货、投教），在近 3 天新闻中去重、排序并精选 20 条，输出股票关联与影响摘要。项目同时保留按沪深A股股票池反查VIP栏目的本地研究模式。
 
 零依赖：只要有 Node.js 18+，不用 `npm install`。
 
@@ -21,7 +21,7 @@ node src/server.js
 
 然后在浏览器打开 <http://127.0.0.1:8848>。
 
-程序启动后会先同步股票池、再抓一次，之后按刷新节奏自动刷新：交易日 07:00-16:00 每 10 分钟、交易日其他时段每 2 小时、非交易日每 6 小时（交易日用上证指数当日日K核对，节假日自动按非交易日处理）。把 `config.json` 里的 `schedulePolicy` 设为 `false` 可以改回固定的 `refreshMinutes`。页面自己每 30 秒拉一次数据，新出现的新闻会高亮。
+程序启动后会先同步股票池、再抓一次，之后按刷新节奏自动刷新：交易日 07:00-16:00 每 10 分钟、交易日其他时段每 2 小时、非交易日每 6 小时（交易日用上证指数当日日K核对，节假日自动按非交易日处理）。把 `config.json` 里的 `schedulePolicy` 设为 `false` 可以改回固定的 `refreshMinutes`。GitHub Pages 看板每 60 秒检查最新发布快照。
 
 ## 一次性抓取并导出表格
 
@@ -70,6 +70,7 @@ node src/backup.js --restore 2026-09-13 --yes      # 真正恢复到项目目录
 ```bash
 node src/cli.js                # 抓取 7 天 + 导出 CSV/HTML/JSON
 node src/cli.js --days 3       # 只抓近 3 天
+node src/cli.js --site-news --days 3 --no-research --no-technical  # 财联社深度全分类新闻
 node src/cli.js --limit 20     # 只跑前 20 只股票（试跑用）
 node src/cli.js --export       # 不抓取，只用本地缓存重新导出
 node src/cli.js --no-text      # 跳过正文抓取，只收标题

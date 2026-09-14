@@ -323,9 +323,87 @@ async function collect(opts) {
   return { store: store, stats: stats, errors: errors };
 }
 
+function upsertDepthArticle(store, item, category) {
+  const id = String(item.id);
+  const rec = store.articles[id] || {
+    id: id,
+    ctime: item.ctime,
+    title: item.title || '',
+    brief: item.brief || '',
+    column: category.name || category.id,
+    text: '',
+    textSource: item.brief ? 'brief' : 'none',
+    url: 'https://www.cls.cn/detail/' + id,
+    stocks: [],
+    pools: [],
+    firstSeen: new Date().toISOString(),
+  };
+  rec.ctime = item.ctime || rec.ctime;
+  rec.title = item.title || rec.title;
+  rec.brief = item.brief || rec.brief;
+  rec.column = category.name || category.id;
+  rec.siteCategory = category.name || category.id;
+  rec.siteSource = '财联社深度全分类';
+  rec.level = item.level || rec.level || '';
+  rec.readingNum = Number(item.reading_num || rec.readingNum || 0);
+  rec.pools = rec.pools || [];
+  if (rec.pools.indexOf('site-depth') < 0) rec.pools.push('site-depth');
+  rec.matchedConfig = true;
+  // 某些接口版本会直接带 quotes_info，存在时保留真实关联股票。
+  for (const q of item.quotes_info || []) {
+    if (q && q.code && !rec.stocks.some(function (s) { return s.code === q.code; })) {
+      rec.stocks.push({ code: q.code, name: q.name || '' });
+    }
+  }
+  store.articles[id] = rec;
+  return rec;
+}
+
+/**
+ * 拉取财联社深度页的全分类新闻。每个分类接口提供最新窗口，持续运行时
+ * 通过 data/news.json 累积并去重，从而形成滚动的近 N 天全站新闻池。
+ */
+async function collectSiteNews(opts) {
+  opts = opts || {};
+  const cfg = Object.assign(loadConfig(), opts);
+  const days = Number(cfg.days || 3);
+  const cutoff = Math.floor(Date.now() / 1000) - days * 86400;
+  const categories = Array.isArray(opts.categories) && opts.categories.length
+    ? opts.categories
+    : cls.DEPTH_CATEGORIES;
+  const store = loadStore();
+  const stats = { categories: categories.length, listed: 0, matched: 0, errors: 0, byCategory: {} };
+  const errors = [];
+
+  await runPool(categories, async function (category) {
+    try {
+      const res = await cls.fetchDepthArticles(category.id, { timeout: cfg.timeout || 20000 });
+      let kept = 0;
+      for (const item of res.items) {
+        stats.listed++;
+        if (!item.ctime || item.ctime < cutoff) continue;
+        upsertDepthArticle(store, item, category);
+        kept++;
+        stats.matched++;
+      }
+      stats.byCategory[category.id] = { name: category.name, listed: res.items.length, kept: kept };
+    } catch (err) {
+      stats.errors++;
+      errors.push({ category: category.id, name: category.name, error: String((err && err.message) || err) });
+    }
+  }, Math.max(1, cfg.siteConcurrency || 4));
+
+  store.lastRun = { at: new Date().toISOString(), cutoff: cutoff, source: 'site-depth', stats: stats, errors: errors.slice(0, 20) };
+  prune(store, cutoff);
+  prunePoolKeys(store);
+  saveStore(store);
+  return { store: store, stats: stats, errors: errors };
+}
+
 /** 去掉记录里已经不存在（被删除）的股票池标记，避免旧池名残留。 */
 function prunePoolKeys(store) {
   const valid = new Set(loadPools().map(function (p) { return p.key; }));
+  valid.add('site-depth');
   if (!valid.size) return;
   for (const id of Object.keys(store.articles)) {
     const rec = store.articles[id];
@@ -366,6 +444,7 @@ function rows(store, options) {
   const out = [];
   const arts = Object.values(store.articles)
     .filter(function (r) { return r.ctime >= cutoff; })
+    .filter(function (r) { return !options.siteOnly || r.siteSource === '财联社深度全分类'; })
     .filter(function (r) {
       const pools = r.pools && r.pools.length ? r.pools : ['watchlist'];
       if (pool && pools.indexOf(pool) < 0) return false;
@@ -384,12 +463,14 @@ function rows(store, options) {
       title: r.title,
       text: r.text || r.brief || '',
       textSource: r.textSource || (r.brief ? 'brief' : 'none'),
+      siteCategory: r.siteCategory || '',
+      level: r.level || '',
+      readingNum: Number(r.readingNum || 0),
       url: r.url,
     };
     const list = (r.stocks || []);
     if (!perStock || !list.length) {
       out.push(Object.assign({ id: r.id, stock: base.stocks, stockCode: '', stockCodes: list.map(function (s) { return s.code; }) }, base, emptyMetrics()));
-      out.push(Object.assign({ id: r.id, stock: base.stocks, stockCode: '', others: '', stockCodes: list.map(function (s) { return s.code; }) }, base, emptyMetrics()));
       continue;
     }
     for (const s of list) {
@@ -427,6 +508,7 @@ module.exports = {
   loadStore: loadStore,
   saveStore: saveStore,
   collect: collect,
+  collectSiteNews: collectSiteNews,
   rows: rows,
   runPool: runPool,
 };

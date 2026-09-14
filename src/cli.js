@@ -87,7 +87,11 @@ function siteLinks() { return process.argv.includes('--site-links'); }
   }
 
   const store = collectMod.loadStore();
-  const rows = withPoolNames(collectMod.rows(store, { days: days, pool: (only && only !== true) ? String(only) : 'all' }), names);
+  const rows = withPoolNames(collectMod.rows(store, {
+    days: days,
+    pool: (only && only !== true) ? String(only) : 'all',
+    siteOnly: siteNews,
+  }), names);
   // 先刷技术面：调研结论里的「短线博弈」要引用当轮的日线指标
   if (!process.argv.includes('--no-technical')) {
     let lastTechLog = 0;
@@ -135,7 +139,12 @@ function siteLinks() { return process.argv.includes('--site-links'); }
     alsoCards: true,
     cardsLinks: siteLinks() ? [{ href: '../', label: '表格版' }] : [],
   });
-  const selected20 = top20.write(rows, meta, { days: Math.min(days, 3), limit: 20 });
+  const selected20 = top20.write(rows, meta, {
+    days: Math.min(days, 3),
+    limit: 20,
+    stockUniverse: siteNews && collectMod.loadPool('all-a') ? collectMod.loadPool('all-a').stocks : [],
+    sourceMode: siteNews ? 'site-depth' : 'stock-prefix',
+  });
   console.log('表格共 ' + rows.length + ' 条，已导出：');
   console.log('  ' + out.csvPath);
   console.log('  ' + out.htmlPath);

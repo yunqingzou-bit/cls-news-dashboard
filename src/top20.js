@@ -103,10 +103,20 @@ function impactSummary(item) {
   return `${topic}有一定催化，但信息强度或传导路径仍不完整；等待订单、客户认证、政策细则或业绩数据进一步确认。`;
 }
 
+function mentionedStocks(text, universe) {
+  if (!Array.isArray(universe) || !universe.length) return [];
+  const ignored = new Set(['中国', '华夏', '长城', '东方', '中信', '招商', '国信', '华安', '平安']);
+  return universe
+    .filter((s) => s && s.name && String(s.name).length >= 3 && !ignored.has(String(s.name)) && text.includes(String(s.name)))
+    .sort((a, b) => String(b.name).length - String(a.name).length)
+    .slice(0, 12);
+}
+
 function curate(rows, options = {}) {
   const days = Number(options.days || 3);
   const cutoff = Math.floor(Date.now() / 1000) - days * 86400;
   const groups = new Map();
+  const stockUniverse = Array.isArray(options.stockUniverse) ? options.stockUniverse : [];
 
   for (const row of rows || []) {
     if (!row || !row.ctime || row.ctime < cutoff) continue;
@@ -122,15 +132,22 @@ function curate(rows, options = {}) {
     const titleText = group.map((r) => r.title || '').join(' ');
     const allText = group.map((r) => `${r.title || ''} ${r.text || ''}`).join(' ');
     const stockRows = group.slice().sort((a, b) => Math.abs(Number(b.changePct || 0)) - Math.abs(Number(a.changePct || 0)));
-    const stocks = unique(stockRows.map((r) => r.stockName || r.stock).map(clean));
-    const stockCodes = unique(stockRows.map((r) => r.stockCode).map(clean));
+    let stocks = unique(stockRows.map((r) => r.stockName || r.stock).map(clean));
+    let stockCodes = unique(stockRows.map((r) => r.stockCode).map(clean));
+    if (!stocks.length) {
+      const mentions = mentionedStocks(allText, stockUniverse);
+      stocks = mentions.map((s) => clean(`${s.name}(${s.code})`));
+      stockCodes = mentions.map((s) => clean(s.code));
+    }
     const maxChange = stockRows.reduce((max, r) => Math.max(max, Number(r.changePct || 0)), null);
     const prefixWeight = PREFIX_WEIGHT[first.prefix] || 5;
     const breadth = Math.min(stocks.length, 12) * 0.8;
     const positive = countHits(allText, POSITIVE_WORDS);
     const negative = countHits(allText, NEGATIVE_WORDS);
     const marketMove = Math.min(Math.abs(Number(maxChange || 0)), 20) / 4;
-    const score = Number((prefixWeight + breadth + positive * 1.5 - negative * 0.8 + marketMove).toFixed(1));
+    const levelWeight = first.level === 'A' ? 6 : first.level === 'B' ? 4 : first.level === 'C' ? 1 : 0;
+    const readingWeight = Math.min(Math.log10(Number(first.readingNum || 0) + 1), 6);
+    const score = Number((prefixWeight + levelWeight + readingWeight + breadth + positive * 1.5 - negative * 0.8 + marketMove).toFixed(1));
     const impact = impactOf(allText, first.prefix || '');
     const item = {
       id: String(first.articleId || first.id || ''),
@@ -144,11 +161,14 @@ function curate(rows, options = {}) {
       stockCount: stocks.length,
       url: first.url || `https://www.cls.cn/detail/${first.articleId || first.id}`,
       topic: topicOf(titleText),
+      siteCategory: first.siteCategory || first.prefix || '',
+      level: first.level || '',
+      readingNum: Number(first.readingNum || 0),
       score,
       impactDirection: impact.direction,
       impactLevel: impact.level,
       maxChange,
-      source: '财联社 cls.cn',
+      source: options.sourceMode === 'site-depth' ? '财联社 cls.cn 深度全分类' : '财联社 cls.cn',
     };
     item.impactSummary = impactSummary(item);
     items.push(item);
@@ -161,7 +181,11 @@ function curate(rows, options = {}) {
 function write(rows, meta, options = {}) {
   fs.mkdirSync(OUT_DIR, { recursive: true });
   const days = Number(options.days || 3);
-  const items = curate(rows, { days, limit: options.limit || 20 });
+  const items = curate(rows, {
+    days,
+    limit: options.limit || 20,
+    stockUniverse: options.stockUniverse || [],
+  });
   const from = new Date(Date.now() - days * 86400000).toLocaleDateString('zh-CN', { timeZone: 'Asia/Shanghai' });
   const to = new Date().toLocaleDateString('zh-CN', { timeZone: 'Asia/Shanghai' });
   const payload = {
@@ -171,7 +195,9 @@ function write(rows, meta, options = {}) {
       generatedAt: new Date().toISOString(),
       generatedAtShanghai: new Date().toISOString(),
       source: '财联社 cls.cn',
-      selection: `近${days}天去重后按政策、产业催化、供需变化、订单/认证、关联股票广度和市场验证综合排序`,
+      selection: options.sourceMode === 'site-depth'
+        ? `近${days}天财联社深度全分类新闻去重后，按重要等级、政策与产业催化、阅读热度、关联股票和市场验证综合排序`
+        : `近${days}天去重后按政策、产业催化、供需变化、订单/认证、关联股票广度和市场验证综合排序`,
       count: items.length,
     },
     items,

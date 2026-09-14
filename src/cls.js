@@ -124,6 +124,25 @@ async function api(path, params = {}, { retries = 3, timeout = 20000 } = {}) {
 
 const XQUOTE_HOST = 'https://x-quote.cls.cn';
 
+// 财联社“深度”页的全分类入口。1000 是头条，其余为站内分类频道。
+const DEPTH_CATEGORIES = [
+  { id: '1000', name: '头条' },
+  { id: '1003', name: '股市' },
+  { id: '1135', name: '港股' },
+  { id: '1007', name: '环球' },
+  { id: '1005', name: '公司' },
+  { id: '1118', name: '券商' },
+  { id: '1110', name: '基金' },
+  { id: '1006', name: '地产' },
+  { id: '1032', name: '金融' },
+  { id: '1119', name: '汽车' },
+  { id: '1111', name: '科创' },
+  { id: '1127', name: '创业板' },
+  { id: '1160', name: '品见' },
+  { id: '1124', name: '期货' },
+  { id: '1176', name: '投教' },
+];
+
 /** 调行情域（x-quote.cls.cn）接口，签名规则与网页 API 相同。 */
 async function xquote(path, params = {}, { retries = 3, timeout = 20000 } = {}) {
   const p = Object.assign({ os: 'web', sv: SV, app: APP }, params);
@@ -194,6 +213,26 @@ async function fetchAllStocks({ page = 200, market = 'all' } = {}) {
     out.push({ code: code, name: x.secu_name || '' });
   }
   return { stocks: out, isAll: data && data.is_all };
+}
+
+/**
+ * 拉取财联社深度页一个分类的全站新闻快照。
+ * 该接口返回头条与分类新闻，不依赖股票池，也不限制VIP栏目前缀。
+ */
+async function fetchDepthArticles(category, { timeout = 20000 } = {}) {
+  const id = String(category);
+  const body = await api('/v3/depth/home/assembled/' + encodeURIComponent(id), {
+    category: id,
+  }, { timeout });
+  const data = body && body.data;
+  const list = [];
+  const seen = new Set();
+  for (const item of [...((data && data.top_article) || []), ...((data && data.depth_list) || [])]) {
+    if (!item || !item.id || seen.has(String(item.id)) || item.is_ad) continue;
+    seen.add(String(item.id));
+    list.push(item);
+  }
+  return { category: id, items: list };
 }
 
 /* ------------------------------------------------------- 个股新闻列表 */
@@ -370,6 +409,8 @@ module.exports = {
   xquote,
   fetchIndexConstituents,
   fetchAllStocks,
+  fetchDepthArticles,
+  DEPTH_CATEGORIES,
   fetchStockArticles,
   fetchArticleText,
   extractContentDiv,

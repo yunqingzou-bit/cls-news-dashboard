@@ -87,11 +87,17 @@ jobs:
 
       - name: 组装发布目录
         run: |
-          mkdir -p _site/cards _site/stockbee
-          cp out/cls-news-latest.html _site/index.html
+          mkdir -p _site/cards _site/table _site/stockbee
+          cp public/index.html     _site/index.html
+          cp public/sw.js          _site/sw.js
+          cp public/manifest.webmanifest _site/manifest.webmanifest
+          cp public/icon-192.png   _site/icon-192.png
+          cp public/icon-512.png   _site/icon-512.png
+          cp out/cls-news-latest.html _site/table/index.html
           cp out/cls-news-cards.html  _site/cards/index.html
           cp out/cls-news-latest.csv  _site/news.csv
           cp out/cls-news-latest.json _site/news.json
+          cp out/top20.json           _site/top20.json
           cp out/status.json          _site/status.json
           cp data/research.json _site/research.json
           cp data/technical.json _site/technical.json

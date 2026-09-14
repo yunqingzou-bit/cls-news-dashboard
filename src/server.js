@@ -240,6 +240,10 @@ function handleRequest(req, res) {
 
   if (p === '/' || p === '/index.html') return serveFile(res, path.join(PUBLIC_DIR, 'index.html'));
   if (p === '/manifest.webmanifest') return serveFile(res, path.join(PUBLIC_DIR, 'manifest.webmanifest'));
+  if (p === '/icon-192.png' || p === '/icon-512.png') return serveFile(res, path.join(PUBLIC_DIR, p.slice(1)));
+  if (p === '/top20.json') return serveFile(res, path.join(report.OUT_DIR, 'top20.json'));
+  if (p === '/news.csv') return serveFile(res, path.join(report.OUT_DIR, 'cls-news-latest.csv'));
+  if (p === '/table' || p === '/table/') return serveFile(res, path.join(report.OUT_DIR, 'cls-news-latest.html'));
   // Service Worker 必须由根路径提供，否则作用域被限制在 /public/ 下
   if (p === '/sw.js') {
     const swBody = fs.readFileSync(path.join(PUBLIC_DIR, 'sw.js'));

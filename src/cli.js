@@ -7,6 +7,7 @@ const report = require('./report.js');
 const cls = require('./cls.js');
 const research = require('./research.js');
 const technical = require('./technical.js');
+const top20 = require('./top20.js');
 
 function arg(name, fallback) {
   const i = process.argv.indexOf('--' + name);
@@ -128,11 +129,13 @@ function siteLinks() { return process.argv.includes('--site-links'); }
     alsoCards: true,
     cardsLinks: siteLinks() ? [{ href: '../', label: '表格版' }] : [],
   });
+  const selected20 = top20.write(rows, meta, { days: Math.min(days, 3), limit: 20 });
   console.log('表格共 ' + rows.length + ' 条，已导出：');
   console.log('  ' + out.csvPath);
   console.log('  ' + out.htmlPath);
   console.log('  ' + out.jsonPath);
   if (out.cardsPath) console.log('  ' + out.cardsPath + '  （卡片版）');
+  console.log('  ' + selected20.file + '  （精选20条）');
 
   // 发布状态：定时任务据此判断“距上次刷新多久了”，决定本轮是否真的重新抓取
   const nowMs = Date.now();

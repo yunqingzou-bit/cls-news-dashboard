@@ -15,6 +15,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const cls = require('./cls.js');
 const collectMod = require('./collect.js');
+const technical = require('./technical.js');
 
 const CACHE_FILE = path.join(collectMod.DATA_DIR, 'research.json');
 const COMPANY_INFO_PREFIX = '/729c64f1fd5f64035b9b189c90432560/quote/company_info/';
@@ -242,7 +243,73 @@ function displayEvent(record) {
   return list.find(function (x) { return !/股票交易异常波动/.test(x.title); }) || list[0] || null;
 }
 
-function conclusionFor(record, rows) {
+/**
+ * 短线博弈判断：结合日线技术面（量比、均线位置、偏离度、RSI、当日涨跌）与公告风险，
+ * 给出「适合 / 可关注 / 中性 / 不适合」，适合与可关注时附参与参考位与失效位。
+ */
+function shortTermPlay(metrics, record) {
+  if (!metrics || metrics.young) return { level: '暂缺', text: '短线博弈：技术面样本不足，暂不评估（次新股）' };
+  const c = metrics.close;
+  const num = function (v) { return v === null || v === undefined ? '—' : Number(v).toFixed(2); };
+  let score = 0;
+  const why = [];
+
+  // 量能：有量才有博弈空间
+  if (metrics.volRatio !== null && metrics.volRatio >= 2) { score += 2; why.push('量比 ' + num(metrics.volRatio) + ' 倍放量'); }
+  else if (metrics.volRatio !== null && metrics.volRatio >= 1.2) { score += 1; why.push('量比 ' + num(metrics.volRatio) + ' 倍'); }
+  else if (metrics.volRatio !== null && metrics.volRatio < 0.7) { score -= 1; why.push('量比仅 ' + num(metrics.volRatio) + ' 倍缩量'); }
+
+  // 短期均线结构
+  const ma = function (k) { return metrics['ma' + k] === undefined ? null : metrics['ma' + k]; };
+  const above = function (k) { const v = ma(k); return v !== null && c > v; };
+  if (above(5)) { score += 1; } else { score -= 0.5; }
+  if (above(10)) score += 1;
+  if (above(20)) score += 0.5;
+  if ((metrics.slope20 || 0) > 0) score += 0.5;
+  const bull5 = ma(5) !== null && ma(10) !== null && ma(20) !== null && ma(5) > ma(10) && ma(10) > ma(20);
+  const bear5 = ma(5) !== null && ma(10) !== null && ma(20) !== null && ma(5) < ma(10) && ma(10) < ma(20);
+  if (bull5) { score += 0.5; why.push('5>10>20 日均线多头排列'); }
+  if (bear5) { score -= 1.5; why.push('5<10<20 日均线空头排列'); }
+
+  // 追高风险：偏离 20 日均线过远
+  const dev = ma(20) ? (c / ma(20) - 1) * 100 : null;
+  if (dev !== null && dev > 25) { score -= 1.5; why.push('已高于 20 日均线 ' + dev.toFixed(0) + '%，追高风险'); }
+  else if (dev !== null && dev > 15) { score -= 0.5; why.push('高于 20 日均线 ' + dev.toFixed(0) + '%'); }
+
+  // 情绪与超买超卖
+  if (metrics.chgPct !== null && metrics.chgPct > 5) { score += 0.5; why.push('当日 ' + metrics.chgPct.toFixed(2) + '%'); }
+  if (metrics.chgPct !== null && metrics.chgPct < -5) { score -= 1; why.push('当日 ' + metrics.chgPct.toFixed(2) + '% 走弱'); }
+  if (metrics.rsi14 !== null && metrics.rsi14 >= 80) { score -= 1; why.push('RSI ' + metrics.rsi14 + ' 超买'); }
+  else if (metrics.rsi14 !== null && metrics.rsi14 <= 30) { score += 0.5; why.push('RSI ' + metrics.rsi14 + ' 超跌'); }
+
+  // 公告风险：负面事项直接压分
+  const negHits = (record && record.announcements ? record.announcements : [])
+    .filter(function (x) { return /立案|处罚|诉讼|退市|风险提示|终止|预亏|亏损/.test(x.title); }).length;
+  if (negHits) { score -= 1; why.push('近期公告含风险事项 ' + negHits + ' 条'); }
+
+  const entry = [ma(5), ma(10), ma(20)].filter(function (v) { return v !== null && v < c; }).sort(function (a, b) { return b - a; })[0] || c;
+  const swingStop = (metrics.swingLows || []).map(function (x) { return x.price; }).filter(function (p) { return p < entry; }).sort(function (a, b) { return b - a; })[0];
+  // 短线的止损不能太远：摆动低点若离入场位超过 7%，改用 7% 距离的止损
+  const tightStop = entry * 0.93;
+  const stop = swingStop && swingStop >= tightStop ? swingStop : tightStop;
+  const reason = why.slice(0, 2).join('、') || '短线信号中性';
+  const ma5 = ma(5);
+
+  if (score >= 3) {
+    return { level: '适合', text: '短线博弈：适合｜' + reason + '；参考 ' + num(entry) + ' 附近低吸，跌破 ' + num(stop) + ' 止损' };
+  }
+  if (score >= 1) {
+    const how = ma5 !== null && c < ma5 ? '等放量站上 ' + num(ma5) + '（5 日线）再介入' : '回踩 ' + num(ma5 === null ? entry : ma5) + '（5 日线）附近低吸，跌破 ' + num(stop) + ' 止损';
+    return { level: '可关注', text: '短线博弈：可关注｜' + reason + '；' + how };
+  }
+  if (score >= 0) {
+    return { level: '中性', text: '短线博弈：中性｜' + reason + '，暂不满足短线参与条件' };
+  }
+  return { level: '不适合', text: '短线博弈：不适合｜' + reason + '，短线不宜参与' };
+}
+
+function conclusionFor(record, rows, tech) {
+  const play = shortTermPlay(tech && tech.metrics, record);
   if (!record || record.errorOnly) {
     return [
       '题材：数据暂未取到',
@@ -251,6 +318,7 @@ function conclusionFor(record, rows) {
       '目前大事：待下一轮数据恢复后补充',
       '未来三个月：关注后续定期报告与新闻催化',
       '股东动向：待下一轮数据恢复后补充',
+      play.text,
     ].join('\n');
   }
   const themes = [record.industry].concat(record.concepts || []).filter(Boolean).slice(0, 5).join('、') || '资料暂缺';
@@ -266,6 +334,7 @@ function conclusionFor(record, rows) {
     '目前大事：' + current,
     '未来三个月：' + future,
     '股东动向：' + holdingText(record),
+    play.text,
   ].join('\n');
 }
 
@@ -323,8 +392,9 @@ function isFresh(record, hours) {
   return Date.now() - new Date(record.researchedAt).getTime() < hours * 3600000;
 }
 
-function attachRows(rows, cache) {
+function attachRows(rows, cache, techCache) {
   const c = cache || loadCache();
+  const tc = techCache || technical.loadCache();
   const grouped = {};
   for (const r of rows) {
     if (!r.stockCode) continue;
@@ -333,7 +403,7 @@ function attachRows(rows, cache) {
   }
   for (const r of rows) {
     const rec = c.stocks[r.stockCode];
-    r.researchConclusion = conclusionFor(rec, grouped[r.stockCode] || []);
+    r.researchConclusion = conclusionFor(rec, grouped[r.stockCode] || [], tc.stocks[r.stockCode]);
     r.researchAt = rec && rec.researchedAt || null;
   }
   return rows;

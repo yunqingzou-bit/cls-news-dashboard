@@ -106,7 +106,8 @@ function esc(v) {
   return String(v === null || v === undefined ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-const RESEARCH_LABEL_RE = /(题材|估值(?:（截至[^）]+）)?|未来三个月潜力|目前大事|未来三个月|股东动向)：/g;
+const RESEARCH_LABEL_RE = /(题材|估值(?:（截至[^）]+）)?|未来三个月潜力|目前大事|未来三个月|股东动向|短线博弈)：/g;
+const RESEARCH_PLAY_RISK_RE = /(追高风险|超买|缩量|走弱|不适合|空头排列)/g;
 const RESEARCH_RISK_RE = /(利润同比下滑|营收承压|盈利为负\/PE失真|估值较高|负面公告事项|退市风险)/g;
 const RESEARCH_EVENT_RE = /(重大资产重组|重大合同|控制权变更|发行股份|收购|重组|中标|立案|行政处罚|诉讼|股权质押|股份质押|解除限售|限售股|增减持|增持|减持|回购)/g;
 // 技术面结论的标签与风险词（下降/破位/偏空类内容标红）
@@ -137,6 +138,10 @@ function labelledHtml(value, labelRe, render) {
 }
 
 function highlightedResearchValue(label, value) {
+  if (label === '短线博弈') {
+    if (/^不适合/.test(value)) return '<span class="research-impact">' + esc(value) + '</span>';
+    return splitHighlight(value, RESEARCH_PLAY_RISK_RE);
+  }
   const majorLine = label === '目前大事' && RESEARCH_EVENT_RE.test(value) ||
     label === '股东动向' && !/未检索到|待下一轮/.test(value) && RESEARCH_EVENT_RE.test(value);
   RESEARCH_EVENT_RE.lastIndex = 0;

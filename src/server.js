@@ -88,13 +88,7 @@ async function refresh(reason) {
       r.poolNames = (r.pools || []).map(function (k) { return names[k] || k; });
       return r;
     });
-    const rr = await research.enrichRows(allRows, {
-      config: c,
-      onProgress: function (s) {
-        if (s.done === s.total || s.done % 25 === 0) console.log('  调研 ' + s.done + '/' + s.total + ' ｜ 缓存 ' + s.cached + ' ｜ 失败 ' + s.errors);
-      },
-    });
-    state.research = { total: rr.total, refreshed: rr.refreshed, cached: rr.cached, errors: rr.errors };
+    // 先刷技术面：调研结论里的「短线博弈」要引用当轮的日线指标
     const trr = await technical.refresh(allRows, {
       config: c,
       onProgress: function (s) {
@@ -102,6 +96,13 @@ async function refresh(reason) {
       },
     });
     state.technical = { total: trr.total, refreshed: trr.refreshed, cached: trr.cached, errors: trr.errors };
+    const rr = await research.enrichRows(allRows, {
+      config: c,
+      onProgress: function (s) {
+        if (s.done === s.total || s.done % 25 === 0) console.log('  调研 ' + s.done + '/' + s.total + ' ｜ 缓存 ' + s.cached + ' ｜ 失败 ' + s.errors);
+      },
+    });
+    state.research = { total: rr.total, refreshed: rr.refreshed, cached: rr.cached, errors: rr.errors };
     const range = cls.fmtTime(nowSec - c.days * 86400).slice(0, 10) + ' ~ ' + cls.fmtTime(nowSec).slice(0, 10);
     report.exportAll(allRows, {
       title: '财联社 沪深A股 · 目标栏目新闻',

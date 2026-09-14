@@ -88,6 +88,8 @@ jobs:
       - name: 组装发布目录
         run: |
           mkdir -p _site/cards _site/table _site/stockbee
+          mkdir -p _site/a-share-pulse
+          cp -R a-share-pulse-github/. _site/a-share-pulse/
           cp public/index.html     _site/index.html
           cp public/sw.js          _site/sw.js
           cp public/manifest.webmanifest _site/manifest.webmanifest

@@ -248,7 +248,8 @@ function displayEvent(record) {
  * 给出「适合 / 可关注 / 中性 / 不适合」，适合与可关注时附参与参考位与失效位。
  */
 function shortTermPlay(metrics, record) {
-  if (!metrics || metrics.young) return { level: '暂缺', text: '短线博弈：技术面样本不足，暂不评估（次新股）' };
+  if (!metrics) return { level: '暂缺', text: '短线博弈：技术面数据待补齐（下一轮自动评估）' };
+  if (metrics.young) return { level: '暂缺', text: '短线博弈：上市样本不足，暂不评估' };
   const c = metrics.close;
   const num = function (v) { return v === null || v === undefined ? '—' : Number(v).toFixed(2); };
   let score = 0;

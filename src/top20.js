@@ -185,6 +185,7 @@ function write(rows, meta, options = {}) {
     days,
     limit: options.limit || 20,
     stockUniverse: options.stockUniverse || [],
+    sourceMode: options.sourceMode || '',
   });
   const from = new Date(Date.now() - days * 86400000).toLocaleDateString('zh-CN', { timeZone: 'Asia/Shanghai' });
   const to = new Date().toLocaleDateString('zh-CN', { timeZone: 'Asia/Shanghai' });
@@ -194,7 +195,7 @@ function write(rows, meta, options = {}) {
       range: `${from} ~ ${to}`,
       generatedAt: new Date().toISOString(),
       generatedAtShanghai: new Date().toISOString(),
-      source: '财联社 cls.cn',
+      source: options.sourceMode === 'site-depth' ? '财联社 cls.cn 深度全分类' : '财联社 cls.cn',
       selection: options.sourceMode === 'site-depth'
         ? `近${days}天财联社深度全分类新闻去重后，按重要等级、政策与产业催化、阅读热度、关联股票和市场验证综合排序`
         : `近${days}天去重后按政策、产业催化、供需变化、订单/认证、关联股票广度和市场验证综合排序`,

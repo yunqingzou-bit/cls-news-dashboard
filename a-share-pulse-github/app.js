@@ -18,9 +18,42 @@
   const amount = (value) => { const n = num(value); if (n == null) return '—'; if (Math.abs(n) >= 1e8) return `${(n / 1e8).toFixed(2)}亿`; if (Math.abs(n) >= 1e4) return `${(n / 1e4).toFixed(1)}万`; return `${Math.round(n)}`; };
   const tone = (value) => { const n = num(value); return n == null || n === 0 ? 'neutral' : n > 0 ? 'up' : 'down'; };
   const rows = (diff) => Array.isArray(diff) ? diff : diff && typeof diff === 'object' ? Object.values(diff) : [];
-  const url = (path, params) => `${EM}/${path}?${new URLSearchParams({ ut: UT, ...params })}`;
+  const url = (path, params) => `${EM}/${path}?${new URLSearchParams({ ut: UT, np: 1, wbp2u: '|0|0|0|web', ...params })}`;
+
+  function getJsonp(requestUrl, timeout = 16000) {
+    return new Promise((resolve, reject) => {
+      const callback = `__aSharePulse_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+      const script = document.createElement('script');
+      let settled = false;
+      const finish = (error, value) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        script.remove();
+        try { delete window[callback]; } catch {}
+        error ? reject(error) : resolve(value);
+      };
+      const timer = setTimeout(() => finish(new Error('东方财富 JSONP 请求超时')), timeout);
+      window[callback] = (body) => {
+        if (!body || body.rc !== 0 || !body.data) finish(new Error(body?.message || '东方财富返回空数据'));
+        else finish(null, body.data);
+      };
+      script.onerror = () => finish(new Error('东方财富 JSONP 连接失败'));
+      script.src = `${requestUrl}&cb=${callback}&_=${Date.now()}`;
+      document.head.appendChild(script);
+    });
+  }
+
+  function getEastmoneyJsonp(requestUrl, timeout = 16000) {
+    const candidates = [requestUrl, '82.push2.eastmoney.com', '21.push2.eastmoney.com', '43.push2.eastmoney.com']
+      .map((host, index) => index === 0 ? requestUrl : requestUrl.replace('push2.eastmoney.com', host));
+    return Promise.any(candidates.map((candidate) => getJsonp(candidate, timeout)));
+  }
 
   async function getJson(requestUrl, timeout = 14000) {
+    if (/eastmoney\.com\/api\/qt\//.test(requestUrl)) {
+      try { return await getEastmoneyJsonp(requestUrl, timeout + 2000); } catch {}
+    }
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeout);
     try {
@@ -100,7 +133,7 @@
     try {
       const fields = 'f2,f3,f4,f6,f7,f8,f10,f12,f14,f15,f16,f18';
       const [indexData, stockData, sectorData, breadthData] = await Promise.all([
-        getJson(url('ulist.np/get', { fltt: 2, invt: 2, fields, secids: INDEX_IDS })),
+        getJson(url('ulist.np/get', { np: 1, wbp2u: '|0|0|0|web', fltt: 2, invt: 2, fields, secids: INDEX_IDS })),
         getJson(url('clist/get', { fltt: 2, invt: 2, fid: 'f3', po: 1, pn: 1, pz: 80, fs: MARKET_FS, fields })),
         getJson(url('clist/get', { fltt: 2, invt: 2, fid: 'f3', po: 1, pn: 1, pz: 40, fs: 'm:90+t:2', fields: 'f2,f3,f4,f6,f12,f14' })),
         getJson(url('clist/get', { fltt: 2, invt: 2, fid: 'f3', po: 1, pn: 1, pz: 6000, fs: MARKET_FS, fields: 'f3,f12' }))
@@ -128,7 +161,7 @@
     $('#chartStatus').textContent = '正在加载真实K线'; $('#chartLine').setAttribute('d',''); $('#chartFill').setAttribute('d',''); $('#detailDialog').showModal();
     try {
       const secid = `${/^6/.test(code) ? 1 : 0}.${code}`;
-      const data = await getJson(`${EM_HIS}?${new URLSearchParams({ secid, klt: 101, fqt: 1, beg: '0', end: '20500101', fields1: 'f1,f2,f3,f4', fields2: 'f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61', ut: UT })}`);
+      const data = await getJson(`${EM_HIS}?${new URLSearchParams({ secid, klt: 101, fqt: 1, beg: '0', end: '20500101', fields1: 'f1,f2,f3,f4', fields2: 'f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61', ut: UT, np: 1, wbp2u: '|0|0|0|web' })}`);
       const candles = (data.klines || []).slice(-30).map((line) => line.split(',')).filter((x) => num(x[2]) != null); drawChart(candles); $('#chartStatus').textContent = candles.length ? `最新 ${candles[candles.length - 1][0]}` : '无可用K线';
     } catch { $('#chartStatus').textContent = 'K线暂时不可用'; }
   }

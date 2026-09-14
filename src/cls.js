@@ -353,7 +353,8 @@ function matchPrefix(title, prefixes) {
   if (!p) return '';
   for (const want of prefixes) {
     if (p === want) return p;
-    if (p.length > want.length && /^[\s·・\-—_]/.test(p.slice(want.length))) return p;
+    // 分隔符可能是 ·（U+00B7）、•（U+2022）、・、空格、连字符或下划线，例如「研选•研报数据」「风口研报·行业」
+    if (p.length > want.length && /^[\s·•・\-—_]/.test(p.slice(want.length))) return p;
   }
   return '';
 }

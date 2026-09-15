@@ -17,6 +17,8 @@ const HEADERS = ['新闻发布时间', '涉及股票', '同篇其他股票', '�
 const HTML_HEADERS = ['新闻发布时间', '涉及股票', '前缀类型', '新闻标题', '发布后表现', '当日行情', '后续走势', '换手率', '量较前日', '调研结论', '技术面结论'];
 // 发布时间列要能放下一整行日期（否则会在“2026-09-12”中间断开），所以在窄屏适配下也有足够宽度
 const HTML_COL_WIDTHS = [11, 8, 7, 8, 6, 7, 9, 5, 5, 17, 17];
+// 可点击排序的列：表头名称 -> 行上的 data-* 属性
+const SORTABLE_COLS = { '换手率': 'data-turn', '量较前日': 'data-vol' };
 
 function pct(v) { return v === null || v === undefined ? '' : (v > 0 ? '+' : '') + Number(v).toFixed(2) + '%'; }
 function num(v, d) { return v === null || v === undefined ? '' : Number(v).toFixed(d === undefined ? 2 : d); }
@@ -290,6 +292,30 @@ function groupRow(item, i, opts) {
 }
 
 /** 当天行情小卡片：主要指数 + 市场涨跌 + 领涨主题/板块 + 最热门股票 + 明日看点。 */
+/** 取「短线博弈」结论（适合 / 可关注 / 中性 / 不适合 等），用于表格筛选。 */
+function playFrom(conclusion) {
+  const m = /短线博弈：\s*([^｜\n]+)/.exec(String(conclusion || ''));
+  if (!m) return '';
+  const t = m[1].trim();
+  // 下拉里不需要「（下一轮自动评估）」这种说明性尾注
+  if (/技术面数据待补齐/.test(t)) return '技术面待补齐';
+  return t;
+}
+/** 取技术面「趋势」值（上升趋势 / 下降趋势 / 区间震荡 等），用于表格筛选。 */
+function trendFrom(conclusion) {
+  const m = /趋势：\s*([^（\n]+)/.exec(String(conclusion || ''));
+  if (!m) return '';
+  const t = m[1].trim();
+  // 次新股的文案是「上市不足 N 个交易日，日线样本不足」，逐只都不同，统一成一个选项
+  if (/上市不足/.test(t)) return '上市不足（新股）';
+  return t;
+}
+/** 数值列转成 data 属性（缺失写空串，排序时排最后）。 */
+function numAttr(v) {
+  const n = Number(v);
+  return v === null || v === undefined || !Number.isFinite(n) ? '' : String(n);
+}
+
 function marketCardHtml(card) {
   if (!card || !card.breadth) return '';
   const b = card.breadth;
@@ -483,6 +509,7 @@ function newsBoardHtml(rows) {
 
 const BOARD_CSS = ".bd-stats{display:flex;flex-wrap:wrap;gap:.4em 1.5em;margin:0 0 .9em;padding:.6em .8em;background:#f7f9fc;border:1px solid #eef2f7;border-radius:.56em;color:#5b6472;font-size:.95em}.bd-stats b{font-size:1.08em;color:#1f252c;font-variant-numeric:tabular-nums}";
 const MKT_TOGGLE_CSS = ".mk-click{cursor:pointer}.mk-click:hover{background:#f5f8fc}.mk-caret{flex:0 0 .9em;color:#aab2bd;font-size:.9em}.mk-click.open .mk-caret{transform:rotate(90deg)}.mk-sub{margin:.05em 0 .5em;padding:.1em 0 .1em .85em;border-left:2px solid #e3e8ef}.mk-sub[hidden]{display:none}.mk-subrow{border-bottom:0;padding:.04em 0;font-size:.96em}@media (max-width:760px){.mkt-grid,.mkt-hot{grid-template-columns:1fr}}";
+const SORT_CSS = "th.sortable{cursor:pointer;-webkit-user-select:none;user-select:none;white-space:nowrap}th.sortable:hover{background:#e9edf3}th.sortable::after{content:' ⇅';color:#b6bcc6}th.sortable.sorted::after{content:' ↓';color:#1257a8}th.sortable.sorted-asc::after{content:' ↑';color:#1257a8}";
 const CARD_SCRIPT = '<script>' + "(function(){\n  var els = document.querySelectorAll('[data-mk]');\n  function toggle(el){\n    var sub = document.getElementById(el.getAttribute('data-mk'));\n    if(!sub) return;\n    sub.hidden = !sub.hidden;\n    if(sub.hidden){ el.classList.remove('open'); } else { el.classList.add('open'); }\n  }\n  for (var i = 0; i < els.length; i++) {\n    (function(el){\n      el.addEventListener('click', function(){ toggle(el); });\n      el.addEventListener('keydown', function(e){ if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); toggle(el); } });\n    })(els[i]);\n  }\n})();" + '<' + '/script>';
 
 
@@ -514,7 +541,7 @@ function toHtml(rows, meta, opts) {
   const mobileCss = layout === 'cards' ? CSS_MOBILE_CARDS : CSS_MOBILE_TABLE;
   // 只有表格版需要「按屏幕放大卡片字号」：卡片版本身就是设备宽度，放大反而会溢出被裁切
   const phoneHook = layout === 'table'
-    ? "  if (screen && screen.width && screen.width <= 760) document.body.classList.add('mk-phone');\\n"
+    ? "  if (screen && screen.width && screen.width <= 760) document.body.classList.add('mk-phone');"
     : '';
   const links = (opts.links || []).map(function (l) {
     return ' <a href=' + Q + esc(l.href) + Q + '>' + esc(l.label) + '</a>';
@@ -524,7 +551,12 @@ function toHtml(rows, meta, opts) {
   const viewportContent = layout === 'cards' ? 'width=device-width, initial-scale=1' : 'width=1080';
   const hintHtml = layout === 'cards' ? '' : '<div class=' + Q + 'hint' + Q + ' id=' + Q + 'hint' + Q + ' style=' + Q + 'display:none' + Q + '></div>';
   // 只渲染数据行实际存在的列，避免表头多出两列空列
-  const th = HTML_HEADERS.map(function (h) { return '<th>' + esc(h) + '</th>'; }).join('');
+  const th = HTML_HEADERS.map(function (h) {
+    const key = SORTABLE_COLS[h];
+    return key
+      ? '<th class=' + Q + 'sortable' + Q + ' data-sort=' + Q + key + Q + ' title=' + Q + '点击排序' + Q + '>' + esc(h) + '</th>'
+      : '<th>' + esc(h) + '</th>';
+  }).join('');
   const colgroup = '<colgroup>' + HTML_COL_WIDTHS.map(function (w) { return '<col style=' + Q + 'width:' + w + '%' + Q + '>'; }).join('') + '</colgroup>';
   const body = rows.map(function (r) {
     const stockText = esc(r.stock || r.stocks);
@@ -533,7 +565,12 @@ function toHtml(rows, meta, opts) {
         ' target=' + Q + '_blank' + Q + ' rel=' + Q + 'noopener noreferrer' + Q +
         ' title=' + Q + '在东方财富查看行情与K线' + Q + '>' + stockText + '</a>'
       : stockText;
-    return '<tr data-prefix=' + Q + esc(r.prefix) + Q + '>' +
+    return '<tr data-prefix=' + Q + esc(r.prefix) + Q +
+      ' data-date=' + Q + esc(String(r.time || '').slice(0, 10)) + Q +
+      ' data-turn=' + Q + numAttr(r.turnover) + Q +
+      ' data-vol=' + Q + numAttr(r.volRatioPct) + Q +
+      ' data-play=' + Q + esc(playFrom(r.researchConclusion)) + Q +
+      ' data-trend=' + Q + esc(trendFrom(r.technicalConclusion)) + Q + '>' +
       '<td class=' + Q + 't' + Q + ' data-label=' + Q + '新闻发布时间' + Q + '>' + esc(r.time) + '</td>' +
       '<td data-label=' + Q + '涉及股票' + Q + '>' + stockHtml + '</td>' +
       '<td data-label=' + Q + '前缀类型' + Q + '><span class=' + Q + 'pf' + Q + '>' + esc(r.prefix) + '</span></td>' +
@@ -551,15 +588,126 @@ function toHtml(rows, meta, opts) {
     '<div class=' + Q + 'bar' + Q + '>',
     '<input id=' + Q + 'q' + Q + ' type=' + Q + 'search' + Q + ' placeholder=' + Q + '搜索股票、标题或正文…' + Q + '>',
     '<select id=' + Q + 'pf' + Q + '><option value=' + Q + Q + '>全部栏目</option></select>',
+    '<select id=' + Q + 'fdate' + Q + '><option value=' + Q + Q + '>全部日期</option></select>',
+    '<select id=' + Q + 'fplay' + Q + '><option value=' + Q + Q + '>全部短线博弈</option></select>',
+    '<select id=' + Q + 'ftrend' + Q + '><option value=' + Q + Q + '>全部趋势</option></select>',
     '<span class=' + Q + 'cnt' + Q + ' id=' + Q + 'cnt' + Q + '></span>',
     '</div>',
   ].join('');
-  const script = '<script>' + "(function(){\n  var rows = [].slice.call(document.querySelectorAll('tbody tr'));\n  var q = document.getElementById('q');\n  var pf = document.getElementById('pf');\n  var cnt = document.getElementById('cnt');\n  var hint = document.getElementById('hint');\n  if (hint && screen && screen.width && screen.width <= 760) {\n    hint.textContent = '已按屏幕整页适配：双指缩放或双击可放大查看细节';\n    hint.style.display = 'block';\n  }\n" + phoneHook + "\n  if (!rows.length || !q || !pf) return;\n  var initialQuery = new URLSearchParams(location.search).get('q');\n  if (initialQuery) q.value = initialQuery;\n  var counts = {};\n  rows.forEach(function(tr){ var p = tr.getAttribute('data-prefix') || ''; counts[p] = (counts[p] || 0) + 1; });\n  Object.keys(counts).sort(function(a,b){ return counts[b] - counts[a]; }).forEach(function(p){\n    var o = document.createElement('option');\n    o.value = p; o.textContent = p + '（' + counts[p] + '）';\n    pf.appendChild(o);\n  });\n  var cache = rows.map(function(tr){ return (tr.textContent || '').toLowerCase(); });\n  function apply(){\n    var kw = q.value.trim().toLowerCase();\n    var p = pf.value;\n    var n = 0;\n    for (var i = 0; i < rows.length; i++) {\n      var ok = (!p || rows[i].getAttribute('data-prefix') === p) && (!kw || cache[i].indexOf(kw) > -1);\n      rows[i].style.display = ok ? '' : 'none';\n      if (ok) n++;\n    }\n    cnt.textContent = '显示 ' + n + ' / ' + rows.length + ' 条';\n  }\n  q.addEventListener('input', apply);\n  pf.addEventListener('change', apply);\n  apply();\n})();" + '<' + '/script>';
+  const script = '<script>' + `
+(function(){
+  var rows = [].slice.call(document.querySelectorAll('tbody tr'));
+  var q = document.getElementById('q');
+  var pf = document.getElementById('pf');
+  var fdate = document.getElementById('fdate');
+  var fplay = document.getElementById('fplay');
+  var ftrend = document.getElementById('ftrend');
+  var cnt = document.getElementById('cnt');
+  var hint = document.getElementById('hint');
+  if (hint && screen && screen.width && screen.width <= 760) {
+    hint.textContent = '已按屏幕整页适配：双指缩放或双击可放大查看细节';
+    hint.style.display = 'block';
+  }
+  ${phoneHook}
+  if (!rows.length || !q || !pf) return;
+  var initialQuery = new URLSearchParams(location.search).get('q');
+  if (initialQuery) q.value = initialQuery;
+  // 行内可搜索文本预存到 Map：排序改变 DOM 顺序后仍与行一一对应
+  var searchText = new Map();
+  rows.forEach(function (r) { searchText.set(r, (r.textContent || '').toLowerCase()); });
+  function fill(sel, attr, label, preferOrder) {
+    if (!sel) return;
+    var counts = {};
+    var list = [];
+    rows.forEach(function (r) {
+      var v = r.getAttribute(attr) || '';
+      if (!v) return;
+      if (counts[v] === undefined) { counts[v] = 0; list.push(v); }
+      counts[v]++;
+    });
+    if (preferOrder) {
+      list.sort(function (a, b) {
+        var ia = preferOrder.indexOf(a);
+        var ib = preferOrder.indexOf(b);
+        if (ia < 0) ia = 99;
+        if (ib < 0) ib = 99;
+        return ia - ib;
+      });
+    } else {
+      list.sort(function (a, b) { return (counts[b] - counts[a]) || a.localeCompare(b); });
+    }
+    sel.innerHTML = '';
+    var all = document.createElement('option');
+    all.value = '';
+    all.textContent = label;
+    sel.appendChild(all);
+    list.forEach(function (v) {
+      var o = document.createElement('option');
+      o.value = v;
+      o.textContent = v + '（' + counts[v] + '）';
+      sel.appendChild(o);
+    });
+  }
+  fill(pf, 'data-prefix', '全部栏目');
+  fill(fdate, 'data-date', '全部日期');
+  fill(fplay, 'data-play', '全部短线博弈', ['适合', '可关注', '中性', '不适合']);
+  fill(ftrend, 'data-trend', '全部趋势');
+  function apply() {
+    var kw = q.value.trim().toLowerCase();
+    var n = 0;
+    for (var i = 0; i < rows.length; i++) {
+      var el = rows[i];
+      var ok = (!pf.value || el.getAttribute('data-prefix') === pf.value) &&
+        (!fdate.value || el.getAttribute('data-date') === fdate.value) &&
+        (!fplay.value || el.getAttribute('data-play') === fplay.value) &&
+        (!ftrend.value || el.getAttribute('data-trend') === ftrend.value) &&
+        (!kw || (searchText.get(el) || '').indexOf(kw) > -1);
+      el.style.display = ok ? '' : 'none';
+      if (ok) n++;
+    }
+    cnt.textContent = '显示 ' + n + ' / ' + rows.length + ' 条';
+  }
+  q.addEventListener('input', apply);
+  [pf, fdate, fplay, ftrend].forEach(function (s) { if (s) s.addEventListener('change', apply); });
+  // 表头点击排序：换手率 / 量较前日；空值恒排最后
+  var sortKey = null;
+  var sortDir = -1;
+  var tbody = rows[0].parentNode;
+  var ths = document.querySelectorAll('th[data-sort]');
+  function sortRows(key, dir) {
+    rows.sort(function (a, b) {
+      var av = parseFloat(a.getAttribute(key));
+      var bv = parseFloat(b.getAttribute(key));
+      var an = isFinite(av);
+      var bn = isFinite(bv);
+      if (!an && !bn) return 0;
+      if (!an) return 1;
+      if (!bn) return -1;
+      return (av - bv) * dir;
+    });
+    rows.forEach(function (r) { tbody.appendChild(r); });
+    apply();
+  }
+  for (var t = 0; t < ths.length; t++) {
+    (function (th) {
+      th.addEventListener('click', function () {
+        var key = th.getAttribute('data-sort');
+        sortDir = (sortKey === key && sortDir === -1) ? 1 : -1;
+        sortKey = key;
+        for (var j = 0; j < ths.length; j++) ths[j].classList.remove('sorted', 'sorted-asc');
+        th.classList.add(sortDir === 1 ? 'sorted-asc' : 'sorted');
+        sortRows(key, sortDir);
+      });
+    })(ths[t]);
+  }
+  apply();
+})();
+` + '<' + '/script>';
   return [
     '<!doctype html>',
     '<html lang=' + Q + 'zh-CN' + Q + '><head><meta charset=' + Q + 'utf-8' + Q + '><meta name=' + Q + 'viewport' + Q + ' content=' + Q + viewportContent + Q + '>',
     '<title>财联社栏目新闻 ' + esc(meta.title || '') + '</title>',
-    '<style>' + CSS_BASE + mobileCss + BAR_CSS + EXTRA_CSS + MARKET_CSS + BOARD_CSS + MKT_TOGGLE_CSS + '</style></head><body>',
+    '<style>' + CSS_BASE + mobileCss + BAR_CSS + EXTRA_CSS + MARKET_CSS + BOARD_CSS + MKT_TOGGLE_CSS + SORT_CSS + '</style></head><body>',
     '<h1>' + esc(meta.title || '财联社自选股 · 目标栏目新闻') + '</h1>',
     '<div class=' + Q + 'meta' + Q + '>区间 ' + esc(meta.range) + ' ｜ 共 ' + rows.length + ' 条 ｜ 股票池 ' + esc(meta.poolLabel) + ' ｜ 生成于 ' + esc(meta.generatedAt) + links + '</div>',
     hintHtml,

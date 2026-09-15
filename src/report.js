@@ -245,7 +245,7 @@ function marketCardHtml(card) {
 
   return [
     '<section class="mkt">',
-    '<div class="mkt-hd"><strong>当天行情</strong><span class="mkt-sub">全市场 ' + mkInt(card.total) +
+    '<div class="mkt-hd"><strong>当天行情</strong><span class="mkt-sub">沪深两市 ' + mkInt(card.total) +
       ' 只 ｜ 截止 ' + esc(card.updatedText || '') + '（点链接可看个股行情）</span></div>',
     '<div class="mkt-grid">',
     '<div class="mkt-box"><div class="mkt-h">主要指数</div><div class="mkt-list">' + idxRows + '</div></div>',

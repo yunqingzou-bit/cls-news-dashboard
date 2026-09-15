@@ -137,7 +137,7 @@ function siteLinks() { return process.argv.includes('--site-links'); }
     try {
       meta.card = await market.summary({});
       const b = meta.card.breadth;
-      console.log('当天行情卡片：全市场 ' + meta.card.total + ' 只 ｜ 涨 ' + b.up + ' / 跌 ' + b.down +
+      console.log('当天行情卡片：沪深两市 ' + meta.card.total + ' 只 ｜ 涨 ' + b.up + ' / 跌 ' + b.down +
         ' ｜ 领涨主题 ' + (meta.card.themes[0] ? meta.card.themes[0].name : '—') +
         ' ｜ 主力净流入 ' + b.fundYi + ' 亿');
     } catch (e) {

@@ -182,7 +182,14 @@ function compute(daily) {
   // 次新股：日线样本太少，不做方向判断，只标注上市交易日数
   if (w.length < 130) {
     const last0 = w[w.length - 1];
-    return { kind: 'daily', young: true, bars: w.length, day: last0.day, close: round(last0.c, 2) };
+    // 次新股同样要给出最近 30 个交易日的收盘与当日涨幅，
+    // 否则按新闻日期算 T+0~T+5 时整列都取不到数据（表里显示成一串 “—”）。
+    const youngRecent = [];
+    for (let i = Math.max(1, w.length - 30); i < w.length; i++) {
+      const pc = w[i - 1].c;
+      youngRecent.push([w[i].day, round(w[i].c, 2), pc ? round((w[i].c / pc - 1) * 100, 2) : null]);
+    }
+    return { kind: 'daily', ver: 3, young: true, bars: w.length, day: last0.day, close: round(last0.c, 2), recent: youngRecent };
   }
   const closes = w.map(function (x) { return x.c; });
   const last = w[w.length - 1];
@@ -415,15 +422,21 @@ function conclusionFor(record) {
 
 /* -------------------------------------------------------- 缓存刷新 */
 
-function isFresh(record, hours) {
+function isFresh(record, hours, latestDay) {
   if (!record || !record.at) return false;
   const age = Date.now() - new Date(record.at).getTime();
   // 失败记录 1 小时后重试，避免偶尔的接口抖动把某只股票长期钉在“取不到”
   if (record.error) return age < 3600000;
   // 旧版本按周线/旧均线组合计算，指标口径变更后自动作废重算
   if (!record.metrics || record.metrics.kind !== 'daily' || record.metrics.ver !== 3) return false;
+  // 早期记录没有 recent（T+0~T+5 用的日线窗口）：作废重算一次
+  if (!Array.isArray(record.metrics.recent) || !record.metrics.recent.length) return false;
   // 走了兜底数据源（约 200 根，缺 250 日均线）的记录 2 小时后重试，新浪恢复后自动升级
   if (record.partial) return age < 2 * 3600000;
+  // 日线落后于缓存里更新的记录：说明新的一根 K 线已经可取。
+  // 否则 T+1~T+5 要等到 refreshHours 之后才补齐，表里会一直显示“待更新”。
+  // 最多每 6 小时重试一次，避免停牌股每轮都被重复请求。
+  if (latestDay && record.metrics.day && String(record.metrics.day) < String(latestDay)) return age < 6 * 3600000;
   return age < hours * 3600000;
 }
 
@@ -431,19 +444,31 @@ function isFresh(record, hours) {
  * 按新闻时间算「当天 / T+1 ~ T+5」的日涨跌幅。
  * 当天 = 新闻时间之后（含）的第一个交易日，所以周末或节假日发的新闻，当天算下一个交易日。
  * 返回 { day0, close0, d0, t: [t1..t5] }，尚未发生的档位为 null。
+ * 第三个参数是新闻当日的行情兜底 { close, changePct }：日线取不到（次新股/停牌/取数失败）
+ * 或新闻晚于最新一根日线时，用它在「当天」这一档兜底，T+1~T+5 仍然照常留空待更新。
  */
-function forwardReturns(record, newsSec) {
+function forwardReturns(record, newsSec, fallback) {
   const bars = record && record.metrics && record.metrics.recent;
-  if (!bars || !bars.length || !newsSec) return null;
+  const fb = fallback || {};
+  const hasFb = fb.changePct !== null && fb.changePct !== undefined;
+  const fromQuote = function () {
+    if (!hasFb) return null;
+    const c = fb.close === null || fb.close === undefined ? null : fb.close;
+    return { day0: null, close0: c, d0: fb.changePct, t: [null, null, null, null, null], fromQuote: true };
+  };
+  if (!newsSec || !bars || !bars.length) return fromQuote();
   const key = new Date((Number(newsSec) + 8 * 3600) * 1000).toISOString().slice(0, 10);
   let i = -1;
   for (let k = 0; k < bars.length; k++) {
     if (String(bars[k][0]) >= key) { i = k; break; }
   }
-  if (i === -1) return null;
+  if (i === -1) return fromQuote();
   const t = [];
   for (let n = 1; n <= 5; n++) t.push(i + n < bars.length ? bars[i + n][2] : null);
-  return { day0: bars[i][0], close0: bars[i][1], d0: bars[i][2], t: t };
+  const out = { day0: bars[i][0], close0: bars[i][1], d0: bars[i][2], t: t };
+  // 上市首日等日线里没有前收的场景：当天涨幅用新闻当日行情兜底
+  if ((out.d0 === null || out.d0 === undefined) && hasFb) { out.d0 = fb.changePct; out.fromQuote = true; }
+  return out;
 }
 
 function attachRows(rows, cache) {
@@ -453,7 +478,7 @@ function attachRows(rows, cache) {
     r.technicalConclusion = conclusionFor(rec);
     r.technicalAt = rec && rec.at || null;
     r.technicalDay = rec && rec.metrics && rec.metrics.day || null;
-    r.forward = forwardReturns(rec, r.ctime);
+    r.forward = forwardReturns(rec, r.ctime, { close: r.close, changePct: r.changePct });
   }
   return rows;
 }
@@ -473,7 +498,13 @@ async function refresh(rows, opts) {
   const cache = loadCache();
   const codes = new Map();
   for (const r of rows) if (r.stockCode && !codes.has(r.stockCode)) codes.set(r.stockCode, r.stockName || '');
-  let stale = Array.from(codes.keys()).filter(function (code) { return !isFresh(cache.stocks[code], hours); });
+  // 缓存里最新的那根日线日期：用来把「日线落后」的记录也判定为过期
+  let latestDay = null;
+  for (const rec of Object.values(cache.stocks)) {
+    const d = rec && rec.metrics && rec.metrics.day;
+    if (d && (latestDay === null || String(d) > latestDay)) latestDay = String(d);
+  }
+  let stale = Array.from(codes.keys()).filter(function (code) { return !isFresh(cache.stocks[code], hours, latestDay); });
   // 每轮最多刷新多少只：云端用它可以避免一次抓几百只被数据源限流（0 = 不限）
   const maxPerRun = Number(tcfg.maxPerRun || 0);
   const deferred = maxPerRun > 0 && stale.length > maxPerRun ? stale.length - maxPerRun : 0;

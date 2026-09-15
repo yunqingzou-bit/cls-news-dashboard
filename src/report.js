@@ -16,7 +16,7 @@ const HEADERS = ['新闻发布时间', '涉及股票', '同篇其他股票', '�
 // 网页表格用的列（把 9 个指标并成两列，便于阅读）
 const HTML_HEADERS = ['新闻发布时间', '涉及股票', '前缀类型', '新闻标题', '发布后表现', '当日行情', '后续走势', '换手率', '量较前日', '调研结论', '技术面结论'];
 // 发布时间列要能放下一整行日期（否则会在“2026-09-12”中间断开），所以在窄屏适配下也有足够宽度
-const HTML_COL_WIDTHS = [11, 8, 5, 8, 6, 7, 9, 5, 5, 18, 18];
+const HTML_COL_WIDTHS = [11, 8, 7, 8, 6, 7, 9, 5, 5, 17, 17];
 
 function pct(v) { return v === null || v === undefined ? '' : (v > 0 ? '+' : '') + Number(v).toFixed(2) + '%'; }
 function num(v, d) { return v === null || v === undefined ? '' : Number(v).toFixed(d === undefined ? 2 : d); }
@@ -277,10 +277,119 @@ function marketCardHtml(card) {
   ].join('\n');
 }
 
+
+// ---------------- 财联社新闻股票看板（当天行情卡片之后、表格之前） ----------------
+// 全部指标都由表格自身的行数据算出，不额外请求网络。
+// 口径：一条记录 = 一条新闻 × 一只涉及股票；涨幅 = 该股在新闻当日的涨跌幅；胜率 = 当日上涨的记录占比。
+function boardThemes(conclusion) {
+  const m = /题材：([^\n]+)/.exec(String(conclusion || ''));
+  if (!m) return [];
+  return m[1].split(/[、,，]/).map(function (x) { return x.trim(); })
+    .filter(function (x) { return x && !/数据暂未取到|资料暂缺|暂未取到/.test(x); });
+}
+
+function boardPct(item) { return item.nn ? mkPct(item.sum / item.nn) : '—'; }
+function boardWin(item) { return item.nn ? Math.round(item.wins / item.nn * 100) + '%' : '—'; }
+
+/** 把新闻×股票的行聚合成题材 / 栏目 / 个股三个维度，并渲染成看板。 */
+function newsBoardHtml(rows) {
+  const list = (rows || []).filter(function (r) { return r && (r.stockCode || r.stockName); });
+  if (list.length < 5) return '';
+  const pctOf = function (r) {
+    const v = Number(r.changePct);
+    return r.changePct === null || r.changePct === undefined || !Number.isFinite(v) ? null : v;
+  };
+  const bump = function (map, key, pct, code) {
+    if (!key) return;
+    if (!map.has(key)) map.set(key, { name: key, n: 0, nn: 0, sum: 0, wins: 0, stocks: new Set() });
+    const a = map.get(key);
+    a.n++;
+    if (pct !== null) { a.nn++; a.sum += pct; if (pct > 0) a.wins++; }
+    if (code) a.stocks.add(code);
+  };
+  const topic = new Map();
+  const column = new Map();
+  const stock = new Map();
+  const codes = new Set();
+  let nnAll = 0;
+  let sumAll = 0;
+  let winsAll = 0;
+  for (const r of list) {
+    const p = pctOf(r);
+    if (p !== null) { nnAll++; sumAll += p; if (p > 0) winsAll++; }
+    if (r.stockCode) codes.add(r.stockCode);
+    for (const t of boardThemes(r.researchConclusion)) bump(topic, t, p, r.stockCode);
+    bump(column, r.prefix, p, r.stockCode);
+    bump(stock, r.stockName || r.stock, p, r.stockCode);
+  }
+  const byAvg = function (map, limit) {
+    return Array.from(map.values())
+      .sort(function (a, b) {
+        const av = a.nn ? a.sum / a.nn : -999;
+        const bv = b.nn ? b.sum / b.nn : -999;
+        return (bv - av) || (b.n - a.n);
+      })
+      .slice(0, limit);
+  };
+  const byCount = function (map, limit) {
+    return Array.from(map.values())
+      .sort(function (a, b) { return (b.n - a.n) || ((b.nn ? b.sum / b.nn : -999) - (a.nn ? a.sum / a.nn : -999)); })
+      .slice(0, limit);
+  };
+  const cells = function (item, i, nameHtml, meta) {
+    return '<div class="mk-row"><span class="mk-rank' + (i < 3 ? ' top' : '') + '">' + (i + 1) + '</span>' +
+      nameHtml +
+      '<span class="mk-meta">' + meta + '</span>' +
+      '<span class="mk-p ' + mkCls(item.nn ? item.sum / item.nn : 0) + '">' + boardPct(item) + '</span>' +
+      '<span class="mk-fund">胜率 ' + boardWin(item) + '</span></div>';
+  };
+  const stockLink = function (name) {
+    return esc(name);
+  };
+  const topicRows = byCount(topic, 8).map(function (t, i) {
+    return cells(t, i, '<span class="mk-k">' + esc(t.name) + '</span>', t.n + ' 次 · ' + t.stocks.size + ' 只');
+  }).join('');
+  const columnRows = byAvg(column, 8).map(function (t, i) {
+    return cells(t, i, '<span class="mk-k">' + esc(t.name) + '</span>', t.n + ' 条');
+  }).join('');
+  const stockRows = byAvg(stock, 8).map(function (t, i) {
+    const code = Array.from(t.stocks)[0];
+    const nameHtml = code
+      ? '<a class="mk-link" href=' + Q + 'https://quote.eastmoney.com/' + encodeURIComponent(code) + '.html' + Q +
+        ' target=' + Q + '_blank' + Q + ' rel=' + Q + 'noopener noreferrer' + Q + '>' + esc(t.name) + '</a>'
+      : '<span class="mk-k">' + esc(t.name) + '</span>';
+    return cells(t, i, nameHtml, t.n + ' 条');
+  }).join('');
+  const avgAll = nnAll ? sumAll / nnAll : null;
+  const summary = '<div class="bd-stats">' +
+    '<span><b>' + list.length + '</b> 条记录</span>' +
+    '<span><b>' + codes.size + '</b> 只股票</span>' +
+    '<span><b>' + column.size + '</b> 个栏目</span>' +
+    '<span><b>' + topic.size + '</b> 个题材</span>' +
+    '<span>样本平均涨幅 <b class="' + mkCls(avgAll === null ? 0 : avgAll) + '">' + (avgAll === null ? '—' : mkPct(avgAll)) + '</b></span>' +
+    '<span>上涨占比 <b>' + (nnAll ? Math.round(winsAll / nnAll * 100) + '%' : '—') + '</b></span>' +
+    '</div>';
+  return [
+    '<section class="mkt">',
+    '<div class="mkt-hd"><strong>财联社新闻股票看板</strong><span class="mkt-sub">' +
+      '涨幅 = 该股在新闻当日的涨跌幅 ｜ 胜率 = 当日上涨记录占比 ｜ 一行为一条「新闻 × 股票」</span></div>',
+    summary,
+    '<div class="mkt-grid">',
+    '<div class="mkt-box"><div class="mkt-h">最热题材 / 板块（按提及次数）</div><div class="mkt-list">' + topicRows + '</div></div>',
+    '<div class="mkt-box"><div class="mkt-h">各栏目表现（按平均涨幅）</div><div class="mkt-list">' + columnRows + '</div></div>',
+    '<div class="mkt-box"><div class="mkt-h">个股表现（按平均涨幅）</div><div class="mkt-list">' + stockRows + '</div></div>',
+    '</div>',
+    '</section>',
+  ].join('\n');
+}
+
+const BOARD_CSS = ".bd-stats{display:flex;flex-wrap:wrap;gap:.4em 1.5em;margin:0 0 .9em;padding:.6em .8em;background:#f7f9fc;border:1px solid #eef2f7;border-radius:.56em;color:#5b6472;font-size:.95em}.bd-stats b{font-size:1.08em;color:#1f252c;font-variant-numeric:tabular-nums}";
+
+
 const MARKET_CSS = ".mkt{position:relative;background:linear-gradient(180deg,#fff 0%,#f7f9fc 100%);border:1px solid #e3e8ef;border-radius:1em;padding:1.16em 1.2em 1.2em;margin:0 0 1.3em;box-shadow:0 1px 2px rgba(16,24,40,.04),0 10px 26px -16px rgba(16,24,40,.28);font-size:12.5px}.mkt::before{content:'';position:absolute;left:0;right:0;top:0;height:.26em;border-radius:1em 1em 0 0;background:linear-gradient(90deg,#d93025 0%,#e8873a 46%,#2f9e5f 100%);opacity:.9}.mkt-hd{display:flex;align-items:baseline;gap:.6em;flex-wrap:wrap;margin-bottom:.92em}.mkt-hd strong{font-size:1.26em;letter-spacing:.01em}.mkt-sub{color:#8a929e;font-size:.95em}.mkt-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(19.8em,1fr));gap:.9em}.mkt-box{border:1px solid #eaeef4;border-radius:.72em;padding:.82em .92em .9em;background:#fff;min-width:0}.mkt-wide{grid-column:1/-1}.mkt-h{display:flex;align-items:center;gap:.44em;color:#5b6472;font-size:.95em;font-weight:700;margin-bottom:.62em}.mkt-h::before{content:'';width:.28em;height:.95em;border-radius:.14em;background:#c9d3e0}.mkt-list{display:block}.idx-item{display:flex;align-items:baseline;gap:.5em;padding:.3em .52em;border-radius:.46em;margin-bottom:.26em;background:#f7f9fc}.idx-item:last-child{margin-bottom:0}.idx-item.up{background:linear-gradient(90deg,#fdf1f0,#fff)}.idx-item.down{background:linear-gradient(90deg,#eef8f2,#fff)}.idx-n{color:#414a56;font-weight:600}.idx-v{margin-left:auto;color:#2a3038;font-variant-numeric:tabular-nums}.idx-p{flex:0 0 auto;min-width:4.6em;text-align:center;border-radius:.4em;padding:.08em .3em;font-weight:700;font-variant-numeric:tabular-nums}.idx-item.up .idx-p{background:#fdecea}.idx-item.down .idx-p{background:#e7f6ec}.br-bar{display:flex;height:.52em;border-radius:.26em;overflow:hidden;background:#eef1f5;margin:0 0 .62em}.br-bar i{display:block;height:100%}.br-bar i.up{background:#e05a52}.br-bar i.flat{background:#c8ced8}.br-bar i.down{background:#3aa06a}.mkt-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:.44em}.mk-stat{display:flex;flex-direction:column;align-items:center;gap:.08em;background:#f7f9fc;border:1px solid #eef2f7;border-radius:.5em;padding:.44em .3em}.mk-stat.up{background:#fdf3f2;border-color:#f8dcd9}.mk-stat.down{background:#eef8f2;border-color:#d8ecdf}.mk-stat-n{font-size:1.24em;font-weight:800;line-height:1.24;font-variant-numeric:tabular-nums}.mk-stat-l{color:#8a929e;font-size:.85em}.mkt-note{color:#8a929e;font-size:.9em;margin-top:.62em;line-height:1.6}.mk-row{display:flex;align-items:center;gap:.5em;flex-wrap:wrap;font-size:1em;line-height:1.8;padding:.14em 0;border-bottom:1px dashed #eef1f5}.mk-row:last-child{border-bottom:0}.mk-rank{flex:0 0 auto;min-width:1.5em;height:1.5em;line-height:1.5em;text-align:center;border-radius:.34em;background:#eef2f8;color:#69737f;font-size:.84em;font-weight:700;font-variant-numeric:tabular-nums}.mk-rank.top{background:linear-gradient(135deg,#f0b23c,#e2662f);color:#fff}.mk-k{color:#1f252c;font-weight:700}.mk-meta{color:#8a929e;font-size:.93em}.mk-best{margin-left:auto;color:#4a525c;font-size:.93em}.mk-link{color:#1257a8;text-decoration:none;font-weight:600;max-width:8em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.mk-p{flex:0 0 auto;margin-left:auto;min-width:4.4em;text-align:center;border-radius:.4em;padding:.08em .3em;font-weight:700;font-variant-numeric:tabular-nums}.mk-p.f-up{background:#fdecea}.mk-p.f-down{background:#e7f6ec}.mk-p.f-flat{background:#f1f3f6}.mk-fund{margin-left:.66em;min-width:5em;text-align:right;color:#6b737e;font-size:.93em;font-variant-numeric:tabular-nums}.mkt-hot{display:grid;grid-template-columns:repeat(auto-fit,minmax(16.8em,1fr));gap:.2em 1.5em}.mkt-hot-col{min-width:0}.mkt-hot-h{display:flex;align-items:center;gap:.4em;color:#5b6472;font-size:.9em;font-weight:700;margin:.2em 0 .32em}.mkt-hot-h::before{content:'';width:.34em;height:.34em;border-radius:50%;background:#c9d3e0}.f-flat{color:#6b7280}body.mk-phone .mkt{font-size:28px}";
 
 
-const CSS_BASE = "body{font-family:'Microsoft YaHei',system-ui,sans-serif;margin:24px;color:#1c1c1e;background:#fafafa}h1{font-size:20px;margin:0 0 6px}.meta{color:#666;font-size:13px;margin-bottom:16px}.meta a{white-space:nowrap}.hint{color:#888;font-size:12.5px}table{border-collapse:collapse;width:100%;background:#fff;font-size:13px;table-layout:fixed}th,td{border:1px solid #e5e5e5;padding:8px 10px;vertical-align:top;text-align:left;overflow-wrap:anywhere;word-break:break-word}th{background:#f2f3f5;position:sticky;top:0;z-index:2}td.t{white-space:normal;color:#555;font-variant-numeric:tabular-nums}td.txt{line-height:1.6;white-space:pre-wrap}td.src{white-space:nowrap;color:#888;font-size:12px}.pf{display:inline-block;background:#fff1e6;color:#c2410c;border:1px solid #ffd7bd;border-radius:3px;padding:1px 6px;white-space:nowrap}.pl{display:inline-block;background:#eef4fb;color:#1257a8;border:1px solid #cfe0f2;border-radius:3px;padding:1px 6px;white-space:nowrap;font-size:12px;margin:0 3px 2px 0}a{color:#1257a8;text-decoration:none}a:hover{text-decoration:underline}.tw{background:#fff}" ;
+const CSS_BASE = "body{font-family:'Microsoft YaHei',system-ui,sans-serif;margin:24px;color:#1c1c1e;background:#fafafa}h1{font-size:20px;margin:0 0 6px}.meta{color:#666;font-size:13px;margin-bottom:16px}.meta a{white-space:nowrap}.hint{color:#888;font-size:12.5px}table{border-collapse:collapse;width:100%;background:#fff;font-size:13px;table-layout:fixed}th,td{border:1px solid #e5e5e5;padding:8px 10px;vertical-align:top;text-align:left;overflow-wrap:anywhere;word-break:break-word}th{background:#f2f3f5;position:sticky;top:0;z-index:2}td.t{white-space:normal;color:#555;font-variant-numeric:tabular-nums}td.txt{line-height:1.6;white-space:pre-wrap}td.src{white-space:nowrap;color:#888;font-size:12px}.pf{display:inline-block;background:#fff1e6;color:#c2410c;border:1px solid #ffd7bd;border-radius:3px;padding:1px 6px;white-space:normal;overflow-wrap:anywhere;word-break:break-word;line-height:1.45;text-align:center}.pl{display:inline-block;background:#eef4fb;color:#1257a8;border:1px solid #cfe0f2;border-radius:3px;padding:1px 6px;white-space:nowrap;font-size:12px;margin:0 3px 2px 0}a{color:#1257a8;text-decoration:none}a:hover{text-decoration:underline}.tw{background:#fff}" ;
 
 // 表格版：手机上仍然是表格，靠横向滚动保证列宽，避免挤压与文字重叠
 // 表格版：手机上不生成窄屏布局，而是把页面宽度声明为表格设计宽度（1080），
@@ -346,11 +455,12 @@ function toHtml(rows, meta, opts) {
     '<!doctype html>',
     '<html lang=' + Q + 'zh-CN' + Q + '><head><meta charset=' + Q + 'utf-8' + Q + '><meta name=' + Q + 'viewport' + Q + ' content=' + Q + viewportContent + Q + '>',
     '<title>财联社栏目新闻 ' + esc(meta.title || '') + '</title>',
-    '<style>' + CSS_BASE + mobileCss + BAR_CSS + EXTRA_CSS + MARKET_CSS + '</style></head><body>',
+    '<style>' + CSS_BASE + mobileCss + BAR_CSS + EXTRA_CSS + MARKET_CSS + BOARD_CSS + '</style></head><body>',
     '<h1>' + esc(meta.title || '财联社自选股 · 目标栏目新闻') + '</h1>',
     '<div class=' + Q + 'meta' + Q + '>区间 ' + esc(meta.range) + ' ｜ 共 ' + rows.length + ' 条 ｜ 股票池 ' + esc(meta.poolLabel) + ' ｜ 生成于 ' + esc(meta.generatedAt) + links + '</div>',
     hintHtml,
     marketCardHtml(meta.card),
+    newsBoardHtml(rows),
     toolbar,
     '<div class=' + Q + 'tw' + Q + '><table>' + colgroup + '<thead><tr>' + th + '</tr></thead><tbody>',
     body,

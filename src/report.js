@@ -208,7 +208,54 @@ function mkInt(v) {
   return Number.isFinite(n) ? String(n) : '0';
 }
 
-/** 当天行情小卡片：主要指数 + 市场涨跌 + 领涨主题/板块 + 最热门股票。 */
+/** 板块名太长时只显示最后一段（完整名字放在 title 里）。 */
+function outlookShort(name) {
+  const s = String(name || '');
+  const i = s.lastIndexOf('-');
+  return i >= 0 ? s.slice(i + 1) : s;
+}
+
+/**
+ * 明日看点：由今日全市场动量推导的观察名单（板块 + 个股），不是预测。
+ * 数据来自 src/market.js 的 card.outlook。
+ */
+function outlookHtml(card) {
+  const o = card && card.outlook;
+  if (!o || !o.sectors || !o.sectors.length) return '';
+  const b = card.breadth || {};
+  const sectorRows = o.sectors.map(function (s, i) {
+    return '<div class="mk-row"><span class="mk-rank' + (i < 3 ? ' top' : '') + '">' + (i + 1) + '</span>' +
+      '<span class="mk-k" title=' + Q + esc(s.name) + Q + '>' + esc(outlookShort(s.name)) + '</span>' +
+      '<span class="mk-meta">' + mkInt(s.n) + '只 · 涨停' + mkInt(s.limitUp) + ' · ' + mkYi(s.fundYi) + '</span>' +
+      '<span class="mk-p ' + mkCls(s.avgPct) + '">' + mkPct(s.avgPct) + '</span>' +
+      '<span class="mk-fund">动能 ' + mkInt(s.score) + '</span></div>';
+  }).join('');
+  const picks = o.picks || [];
+  const pickRows = picks.map(function (p, i) {
+    return '<div class="mk-row"><span class="mk-rank' + (i < 3 ? ' top' : '') + '">' + (i + 1) + '</span>' +
+      '<a class="mk-link" href=' + Q + 'https://quote.eastmoney.com/' + encodeURIComponent(p.code) + '.html' + Q +
+      ' target=' + Q + '_blank' + Q + ' rel=' + Q + 'noopener noreferrer' + Q + '>' + esc(p.name) + '</a>' +
+      '<span class="mk-meta">' + (p.theme ? esc(outlookShort(p.theme)) : '—') + '</span>' +
+      '<span class="mk-p ' + mkCls(p.pct) + '">' + mkPct(p.pct) + (p.limitUp ? ' 涨停' : '') + '</span>' +
+      '<span class="mk-fund">换手 ' + num(p.tr) + '% · ' + mkYi(p.fundYi) + '</span></div>';
+  }).join('');
+  const limitCnt = picks.filter(function (p) { return p.limitUp; }).length;
+  const note = '动能定调：' + esc(o.tone) + '（上涨 ' + mkInt(b.up) + ' / 下跌 ' + mkInt(b.down) + '，涨停 ' +
+    mkInt(b.limitUp) + ' / 跌停 ' + mkInt(b.limitDown) + '，主力净流入 ' + mkYi(b.fundYi) + '）｜ 题材样本 ' +
+    mkInt(o.coverage) + ' 只，其中上涨 ' + mkInt(o.coveredUpPct) + '%';
+  return [
+    '<div class="mkt-box mkt-wide"><div class="mkt-h">明日看点</div>',
+    '<div class="mkt-note" style=' + Q + 'margin:0 0 .7em' + Q + '>' + note + '</div>',
+    '<div class="mkt-hot">',
+    '<div class="mkt-hot-col"><div class="mkt-hot-h">关注板块（动能排序，成分 ≥ ' + mkInt(o.minN) + ' 只）</div>' + sectorRows + '</div>',
+    '<div class="mkt-hot-col"><div class="mkt-hot-h">关注个股（' + mkInt(picks.length) + ' 只，其中涨停 ' + mkInt(limitCnt) + ' 只）</div>' + pickRows + '</div>',
+    '</div>',
+    '<div class="mkt-note">口径：由今日全市场行情推导的动量观察名单，非预测。板块动能 = 均涨 + 上涨占比 + 强势股占比 + 主力净流入；个股分 = 涨幅 + 主力净流入 + 热门板块加成。涨停股收盘价买不到，名单最多 4 只涨停、每板块最多 3 只。样本为新闻与资金榜涉及的个股，不等于全市场板块广度。</div>',
+    '</div>',
+  ].join('\n');
+}
+
+/** 当天行情小卡片：主要指数 + 市场涨跌 + 领涨主题/板块 + 最热门股票 + 明日看点。 */
 function marketCardHtml(card) {
   if (!card || !card.breadth) return '';
   const b = card.breadth;
@@ -272,6 +319,7 @@ function marketCardHtml(card) {
       '<div class="mkt-hot-col"><div class="mkt-hot-h">涨幅榜</div>' + (card.hotGain || []).map(hotRow).join('') + '</div>' +
       '<div class="mkt-hot-col"><div class="mkt-hot-h">主力净流入榜</div>' + (card.hotFund || []).map(hotRow).join('') + '</div>' +
       '</div></div>',
+    outlookHtml(card),
     '</div>',
     '</section>',
   ].join('\n');

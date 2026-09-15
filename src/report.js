@@ -9,13 +9,14 @@ const Q = String.fromCharCode(34);
 
 const HEADERS = ['新闻发布时间', '涉及股票', '同篇其他股票', '前缀类型', '新闻标题',
   '发布时价格', '发布后5min涨幅', '发布后30min涨幅', '发布后2h涨幅',
-  '当天开盘价', '当天收盘价', '当天涨幅', '成交量较前日', '换手率', '交易日',
+  '当天开盘价', '当天收盘价', '当天涨幅', 'T+1涨幅', 'T+2涨幅', 'T+3涨幅', 'T+4涨幅', 'T+5涨幅',
+  '成交量较前日', '换手率', '交易日',
   '股票代码', '文章链接', '调研结论'];
 
 // 网页表格用的列（把 9 个指标并成两列，便于阅读）
-const HTML_HEADERS = ['新闻发布时间', '涉及股票', '前缀类型', '新闻标题', '发布后表现', '当日行情', '换手率', '量较前日', '调研结论', '技术面结论'];
+const HTML_HEADERS = ['新闻发布时间', '涉及股票', '前缀类型', '新闻标题', '发布后表现', '当日行情', '后续走势', '换手率', '量较前日', '调研结论', '技术面结论'];
 // 发布时间列要能放下一整行日期（否则会在“2026-09-12”中间断开），所以在窄屏适配下也有足够宽度
-const HTML_COL_WIDTHS = [11, 9, 5, 9, 7, 8, 5, 5, 21, 20];
+const HTML_COL_WIDTHS = [11, 8, 5, 8, 6, 7, 9, 5, 5, 18, 18];
 
 function pct(v) { return v === null || v === undefined ? '' : (v > 0 ? '+' : '') + Number(v).toFixed(2) + '%'; }
 function num(v, d) { return v === null || v === undefined ? '' : Number(v).toFixed(d === undefined ? 2 : d); }
@@ -64,6 +65,22 @@ function dayHtml(r) {
   return p.length ? p.join('  ') : '—';
 }
 
+// 当天 + T+1 ~ T+5 的日涨跌幅（红涨绿跌；尚未发生的档位显示“待更新”）
+const FORWARD_LABELS = ['当天', 'T+1', 'T+2', 'T+3', 'T+4', 'T+5'];
+function forwardHtml(r) {
+  const f = r.forward;
+  if (!f) return '—';
+  const item = function (label, v, extra) {
+    const key = '<strong class=' + Q + 'research-key' + Q + '>' + label + '</strong>';
+    if (v === null || v === undefined) return '<div class=' + Q + 'research-item' + Q + '>' + key + '<span>待更新</span></div>';
+    const cls = v > 0 ? 'f-up' : v < 0 ? 'f-down' : '';
+    return '<div class=' + Q + 'research-item' + Q + '>' + key + '<span class=' + Q + cls + Q + '>' + pct(v) + (extra || '') + '</span></div>';
+  };
+  const out = [item('当天', f.d0, f.close0 ? '（收 ' + num(f.close0) + '）' : '')];
+  for (let i = 0; i < 5; i++) out.push(item(FORWARD_LABELS[i + 1], f.t[i]));
+  return out.join('');
+}
+
 // 换手率配色：10~15 绿、15~20 蓝、>20 红
 function turnLevel(v) {
   if (v === null || v === undefined) return '';
@@ -92,10 +109,14 @@ function csvCell(v) {
 function toCsv(rows) {
   const out = [HEADERS.map(csvCell).join(',')];
   for (const r of rows) {
+    const fw = r.forward || {};
+    const tArr = fw.t || [];
     out.push([r.time, r.stock || r.stocks, r.others || '', r.prefix, r.title,
       r.refPx === null || r.refPx === undefined ? '' : num(r.refPx),
       r.m5, r.m30, r.m120,
-      r.open, r.close, r.changePct, r.volRatioPct, r.turnover,
+      r.open, r.close, fw.d0 === undefined ? r.changePct : fw.d0,
+      tArr[0], tArr[1], tArr[2], tArr[3], tArr[4],
+      r.volRatioPct, r.turnover,
       r.tradeDate || '',
       r.stockCodes.join(' '), r.url, r.researchConclusion || ''].map(csvCell).join(','));
   }
@@ -174,7 +195,7 @@ const CSS_MOBILE_CARDS = "@media (max-width:760px){html,body{max-width:100%;over
 
 const BAR_CSS = ".bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0 0 12px}.bar input[type=search]{flex:1 1 240px;min-width:0;font:inherit;font-size:13px;padding:7px 10px;border:1px solid #e5e5e5;border-radius:7px;background:#fff;color:#1c1c1e}.bar select{font:inherit;font-size:13px;padding:7px 10px;border:1px solid #e5e5e5;border-radius:7px;background:#fff;color:#1c1c1e;max-width:220px}.cnt{color:#888;font-size:12px;white-space:nowrap}@media (max-width:760px){.bar input[type=search]{flex:1 1 100%}.bar select{flex:1 1 40%}}";
 
-const EXTRA_CSS = "td.perf,td.day{font-variant-numeric:tabular-nums;font-size:12.5px;line-height:1.7;color:#3b4149}td.turn,td.vol{font-variant-numeric:tabular-nums;font-size:12.5px;font-weight:600}td.research,td.tech{font-size:12.5px;line-height:1.7;color:#3b4149}.research-item{display:block;margin:0 0 5px}.research-item:last-child{margin-bottom:0}.research-key{font-weight:700;color:#20252b}.research-impact{color:#c62828;font-weight:700}.v-green{color:#0f9d58}.v-blue{color:#1a73e8}.v-red{color:#d93025}.up-strong{color:#d93025;font-weight:600}.up-limit{color:#8b0000;font-weight:700}@media (max-width:760px){td[data-label=\"发布后表现\"]{order:3}td[data-label=\"当日行情\"]{order:4}td[data-label=\"换手率\"]{order:5}td[data-label=\"量较前日\"]{order:6}td[data-label=\"调研结论\"]{order:7;padding-top:7px}td[data-label=\"技术面结论\"]{order:8;padding-top:7px}td[data-label=\"新闻发布时间\"]{order:9}td[data-label=\"前缀类型\"]{order:10}.research-item{margin-bottom:7px}}";
+const EXTRA_CSS = "td.perf,td.day,td.fwd{font-variant-numeric:tabular-nums;font-size:12.5px;line-height:1.7;color:#3b4149}td.turn,td.vol{font-variant-numeric:tabular-nums;font-size:12.5px;font-weight:600}td.research,td.tech{font-size:12.5px;line-height:1.7;color:#3b4149}.f-up{color:#d93025;font-weight:600}.f-down{color:#0f9d58;font-weight:600}.research-item{display:block;margin:0 0 5px}.research-item:last-child{margin-bottom:0}.research-key{font-weight:700;color:#20252b}.research-impact{color:#c62828;font-weight:700}.v-green{color:#0f9d58}.v-blue{color:#1a73e8}.v-red{color:#d93025}.up-strong{color:#d93025;font-weight:600}.up-limit{color:#8b0000;font-weight:700}@media (max-width:760px){td[data-label=\"发布后表现\"]{order:3}td[data-label=\"当日行情\"]{order:4}td[data-label=\"后续走势\"]{order:5}td[data-label=\"换手率\"]{order:6}td[data-label=\"量较前日\"]{order:7}td[data-label=\"调研结论\"]{order:8;padding-top:7px}td[data-label=\"技术面结论\"]{order:9;padding-top:7px}td[data-label=\"新闻发布时间\"]{order:10}td[data-label=\"前缀类型\"]{order:11}.research-item{margin-bottom:7px}}";
 
 /**
  * opts.layout: 'table'（默认，任何屏幕都保持表格，窄屏横向滚动）| 'cards'（窄屏折叠成卡片）
@@ -208,6 +229,7 @@ function toHtml(rows, meta, opts) {
       '<td data-label=' + Q + '新闻标题' + Q + '><a href=' + Q + esc(r.url) + Q + ' target=' + Q + '_blank' + Q + '>' + esc(r.title) + '</a></td>' +
       '<td class=' + Q + 'perf' + Q + ' data-label=' + Q + '发布后表现' + Q + '>' + esc(afterText(r)) + '</td>' +
       '<td class=' + Q + 'day' + Q + ' data-label=' + Q + '当日行情' + Q + '>' + dayHtml(r) + '</td>' +
+      '<td class=' + Q + 'fwd' + Q + ' data-label=' + Q + '后续走势' + Q + '>' + forwardHtml(r) + '</td>' +
       '<td class=' + Q + 'turn ' + turnLevel(r.turnover) + Q + ' data-label=' + Q + '换手率' + Q + '>' + esc(turnText(r)) + '</td>' +
       '<td class=' + Q + 'vol ' + volLevel(r.volRatioPct) + Q + ' data-label=' + Q + '量较前日' + Q + '>' + esc(volText(r)) + '</td>' +
       '<td class=' + Q + 'research' + Q + ' data-label=' + Q + '调研结论' + Q + '>' + researchHtml(r.researchConclusion) + '</td>' +

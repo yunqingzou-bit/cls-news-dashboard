@@ -23,7 +23,7 @@ const CACHE_FILE = path.join(collectMod.DATA_DIR, 'technical.json');
 const SINA = 'https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CN_MarketData.getKLineData';
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131 Safari/537.36';
 // 指标口径版本：周线→日线、均线组合变更等，都必须递增，旧缓存整体作废重算
-const CACHE_VER = 2;
+const CACHE_VER = 3;
 
 /* ------------------------------------------------------------ 取数 */
 
@@ -239,9 +239,16 @@ function compute(daily) {
   const slope50 = slopeOf(50, 5);
   const chgPct = prev && prev.c ? (last.c / prev.c - 1) * 100 : null;
 
+  // 保留最近 30 个交易日的收盘与当日涨幅，用于按新闻日期算 T+0 ~ T+5
+  const recent = [];
+  for (let i = Math.max(1, w.length - 30); i < w.length; i++) {
+    const pc = w[i - 1].c;
+    recent.push([w[i].day, round(w[i].c, 2), pc ? round((w[i].c / pc - 1) * 100, 2) : null]);
+  }
+
   return {
     kind: 'daily',
-    ver: 2,
+    ver: 3,
     day: last.day,
     bars: w.length,
     close: round(last.c, 2),
@@ -270,6 +277,7 @@ function compute(daily) {
     swingLows: recentLows.map(function (x) { return { day: x.day, price: round(x.price, 2) }; }),
     high500: round(Math.max.apply(null, win104.map(function (x) { return x.h; })), 2),
     low500: round(Math.min.apply(null, win104.map(function (x) { return x.l; })), 2),
+    recent: recent,
   };
 }
 
@@ -413,10 +421,29 @@ function isFresh(record, hours) {
   // 失败记录 1 小时后重试，避免偶尔的接口抖动把某只股票长期钉在“取不到”
   if (record.error) return age < 3600000;
   // 旧版本按周线/旧均线组合计算，指标口径变更后自动作废重算
-  if (!record.metrics || record.metrics.kind !== 'daily' || record.metrics.ver !== 2) return false;
+  if (!record.metrics || record.metrics.kind !== 'daily' || record.metrics.ver !== 3) return false;
   // 走了兜底数据源（约 200 根，缺 250 日均线）的记录 2 小时后重试，新浪恢复后自动升级
   if (record.partial) return age < 2 * 3600000;
   return age < hours * 3600000;
+}
+
+/**
+ * 按新闻时间算「当天 / T+1 ~ T+5」的日涨跌幅。
+ * 当天 = 新闻时间之后（含）的第一个交易日，所以周末或节假日发的新闻，当天算下一个交易日。
+ * 返回 { day0, close0, d0, t: [t1..t5] }，尚未发生的档位为 null。
+ */
+function forwardReturns(record, newsSec) {
+  const bars = record && record.metrics && record.metrics.recent;
+  if (!bars || !bars.length || !newsSec) return null;
+  const key = new Date((Number(newsSec) + 8 * 3600) * 1000).toISOString().slice(0, 10);
+  let i = -1;
+  for (let k = 0; k < bars.length; k++) {
+    if (String(bars[k][0]) >= key) { i = k; break; }
+  }
+  if (i === -1) return null;
+  const t = [];
+  for (let n = 1; n <= 5; n++) t.push(i + n < bars.length ? bars[i + n][2] : null);
+  return { day0: bars[i][0], close0: bars[i][1], d0: bars[i][2], t: t };
 }
 
 function attachRows(rows, cache) {
@@ -426,6 +453,7 @@ function attachRows(rows, cache) {
     r.technicalConclusion = conclusionFor(rec);
     r.technicalAt = rec && rec.at || null;
     r.technicalDay = rec && rec.metrics && rec.metrics.day || null;
+    r.forward = forwardReturns(rec, r.ctime);
   }
   return rows;
 }
@@ -497,6 +525,7 @@ module.exports = {
   compute: compute,
   analyse: analyse,
   conclusionFor: conclusionFor,
+  forwardReturns: forwardReturns,
   attachRows: attachRows,
   refresh: refresh,
 };

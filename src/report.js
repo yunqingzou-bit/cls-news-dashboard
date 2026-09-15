@@ -224,11 +224,11 @@ function outlookHtml(card) {
   if (!o || !o.sectors || !o.sectors.length) return '';
   const b = card.breadth || {};
   const sectorRows = o.sectors.map(function (s, i) {
-    return '<div class="mk-row"><span class="mk-rank' + (i < 3 ? ' top' : '') + '">' + (i + 1) + '</span>' +
-      '<span class="mk-k" title=' + Q + esc(s.name) + Q + '>' + esc(outlookShort(s.name)) + '</span>' +
-      '<span class="mk-meta">' + mkInt(s.n) + '只 · 涨停' + mkInt(s.limitUp) + ' · ' + mkYi(s.fundYi) + '</span>' +
-      '<span class="mk-p ' + mkCls(s.avgPct) + '">' + mkPct(s.avgPct) + '</span>' +
-      '<span class="mk-fund">动能 ' + mkInt(s.score) + '</span></div>';
+    return groupRow(s, i, {
+      meta: mkInt(s.n) + '只 · 涨停' + mkInt(s.limitUp) + ' · ' + mkYi(s.fundYi),
+      tail: '<span class="mk-p ' + mkCls(s.avgPct) + '">' + mkPct(s.avgPct) + '</span>' +
+        '<span class="mk-fund">动能 ' + mkInt(s.score) + '</span>',
+    });
   }).join('');
   const picks = o.picks || [];
   const pickRows = picks.map(function (p, i) {
@@ -253,6 +253,40 @@ function outlookHtml(card) {
     '<div class="mkt-note">口径：由今日全市场行情推导的动量观察名单，非预测。板块动能 = 均涨 + 上涨占比 + 强势股占比 + 主力净流入；个股分 = 涨幅 + 主力净流入 + 热门板块加成。涨停股收盘价买不到，名单最多 4 只涨停、每板块最多 3 只。样本为新闻与资金榜涉及的个股，不等于全市场板块广度。</div>',
     '</div>',
   ].join('\n');
+}
+
+let mkSeq = 0;
+function mkNextId() { mkSeq++; return "mk-sub-" + mkSeq; }
+
+/** 展开后的成分股列表（名称可点进东方财富看 K 线）。 */
+function subList(stocks, id) {
+  if (!stocks || !stocks.length) return "";
+  const rows = stocks.map(function (s) {
+    return '<div class="mk-row mk-subrow">' +
+      '<a class="mk-link" href=' + Q + 'https://quote.eastmoney.com/' + encodeURIComponent(s.code) + '.html' + Q +
+      ' target=' + Q + '_blank' + Q + ' rel=' + Q + 'noopener noreferrer' + Q + '>' + esc(s.name) + '</a>' +
+      '<span class="mk-p ' + mkCls(s.pct) + '">' + mkPct(s.pct) + '</span>' +
+      (s.fundYi === undefined ? '' : '<span class="mk-fund">' + mkYi(s.fundYi) + '</span>') +
+      '</div>';
+  }).join("");
+  return '<div class="mk-sub" id=' + Q + id + Q + ' hidden>' + rows + '</div>';
+}
+
+/** 一条可点击展开的板块行：点击后显示该板块下的成分股。 */
+function groupRow(item, i, opts) {
+  opts = opts || {};
+  const stocks = item.stocks || [];
+  const id = mkNextId();
+  const clickable = stocks.length > 0;
+  const rank = i >= 0 ? '<span class="mk-rank' + (i < 3 ? ' top' : '') + '">' + (i + 1) + '</span>' : '';
+  return '<div class="mk-row' + (clickable ? ' mk-click' : '') + '"' +
+    (clickable ? ' data-mk=' + Q + id + Q + ' role=' + Q + 'button' + Q + ' tabindex=' + Q + '0' + Q : '') + '>' +
+    rank +
+    (clickable ? '<span class="mk-caret">▸</span>' : '') +
+    '<span class="mk-k" title=' + Q + esc(item.name) + Q + '>' + esc(outlookShort(item.name)) + '</span>' +
+    '<span class="mk-meta">' + (opts.meta || '') + '</span>' +
+    (opts.tail || '') +
+    '</div>' + subList(stocks, id);
 }
 
 /** 当天行情小卡片：主要指数 + 市场涨跌 + 领涨主题/板块 + 最热门股票 + 明日看点。 */
@@ -287,15 +321,14 @@ function marketCardHtml(card) {
   }).join('');
 
   const themeRows = (card.themes || []).map(function (t, i) {
-    return '<div class="mk-row"><span class="mk-rank' + (i < 3 ? ' top' : '') + '">' + (i + 1) + '</span>' +
-      '<span class="mk-k">' + esc(t.name) + '</span>' +
-      '<span class="mk-meta">' + mkInt(t.n) + ' 只 · 均涨 ' + mkPct(t.avgPct) + '</span>' +
-      (t.best ? '<span class="mk-best">' + esc(t.best.name) + ' <b class="' + mkCls(t.best.pct) + '">' + mkPct(t.best.pct) + '</b></span>' : '') +
-      '</div>';
+    return groupRow(t, i, {
+      meta: mkInt(t.n) + ' 只 · 均涨 ' + mkPct(t.avgPct),
+      tail: t.best ? '<span class="mk-best">' + esc(t.best.name) + ' <b class="' + mkCls(t.best.pct) + '">' + mkPct(t.best.pct) + '</b></span>' : '',
+    });
   }).join('');
-  const indLine = (card.industries || []).map(function (t) {
-    return esc(t.name) + '（' + mkInt(t.n) + ' 只 · ' + mkPct(t.avgPct) + '）';
-  }).join('、');
+  const industryRows = (card.industries || []).map(function (t, i) {
+    return groupRow(t, i, { meta: mkInt(t.n) + ' 只 · 均涨 ' + mkPct(t.avgPct) });
+  }).join('');
 
   const hotRow = function (x, i) {
     return '<div class="mk-row"><span class="mk-rank' + (i < 3 ? ' top' : '') + '">' + (i + 1) + '</span>' +
@@ -314,7 +347,8 @@ function marketCardHtml(card) {
     '<div class="mkt-box"><div class="mkt-h">市场涨跌</div>' + brBar + '<div class="mkt-stats">' + stats + '</div>' +
       '<div class="mkt-note">涨超5% ' + mkInt(b.up5) + ' 只 ｜ 跌超5% ' + mkInt(b.down5) + ' 只</div></div>',
     '<div class="mkt-box"><div class="mkt-h">领涨主题 / 板块</div><div class="mkt-list">' + themeRows + '</div>' +
-      (indLine ? '<div class="mkt-note">行业：' + indLine + '</div>' : '') + '</div>',
+      (industryRows ? '<div class="mkt-note" style=' + Q + 'margin:.55em 0 .3em' + Q + '>行业（细分）</div>' +
+        '<div class="mkt-list">' + industryRows + '</div>' : '') + '</div>',
     '<div class="mkt-box mkt-wide"><div class="mkt-h">最热门股票</div><div class="mkt-hot">' +
       '<div class="mkt-hot-col"><div class="mkt-hot-h">涨幅榜</div>' + (card.hotGain || []).map(hotRow).join('') + '</div>' +
       '<div class="mkt-hot-col"><div class="mkt-hot-h">主力净流入榜</div>' + (card.hotFund || []).map(hotRow).join('') + '</div>' +
@@ -448,6 +482,8 @@ function newsBoardHtml(rows) {
 }
 
 const BOARD_CSS = ".bd-stats{display:flex;flex-wrap:wrap;gap:.4em 1.5em;margin:0 0 .9em;padding:.6em .8em;background:#f7f9fc;border:1px solid #eef2f7;border-radius:.56em;color:#5b6472;font-size:.95em}.bd-stats b{font-size:1.08em;color:#1f252c;font-variant-numeric:tabular-nums}";
+const MKT_TOGGLE_CSS = ".mk-click{cursor:pointer}.mk-click:hover{background:#f5f8fc}.mk-caret{flex:0 0 .9em;color:#aab2bd;font-size:.9em}.mk-click.open .mk-caret{transform:rotate(90deg)}.mk-sub{margin:.05em 0 .5em;padding:.1em 0 .1em .85em;border-left:2px solid #e3e8ef}.mk-sub[hidden]{display:none}.mk-subrow{border-bottom:0;padding:.04em 0;font-size:.96em}";
+const CARD_SCRIPT = '<script>' + "(function(){\n  var els = document.querySelectorAll('[data-mk]');\n  function toggle(el){\n    var sub = document.getElementById(el.getAttribute('data-mk'));\n    if(!sub) return;\n    sub.hidden = !sub.hidden;\n    if(sub.hidden){ el.classList.remove('open'); } else { el.classList.add('open'); }\n  }\n  for (var i = 0; i < els.length; i++) {\n    (function(el){\n      el.addEventListener('click', function(){ toggle(el); });\n      el.addEventListener('keydown', function(e){ if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); toggle(el); } });\n    })(els[i]);\n  }\n})();" + '<' + '/script>';
 
 
 const MARKET_CSS = ".mkt{position:relative;background:linear-gradient(180deg,#fff 0%,#f7f9fc 100%);border:1px solid #e3e8ef;border-radius:1em;padding:1.16em 1.2em 1.2em;margin:0 0 1.3em;box-shadow:0 1px 2px rgba(16,24,40,.04),0 10px 26px -16px rgba(16,24,40,.28);font-size:12.5px}.mkt::before{content:'';position:absolute;left:0;right:0;top:0;height:.26em;border-radius:1em 1em 0 0;background:linear-gradient(90deg,#d93025 0%,#e8873a 46%,#2f9e5f 100%);opacity:.9}.mkt-hd{display:flex;align-items:baseline;gap:.6em;flex-wrap:wrap;margin-bottom:.92em}.mkt-hd strong{font-size:1.26em;letter-spacing:.01em}.mkt-sub{color:#8a929e;font-size:.95em}.mkt-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(19.8em,1fr));gap:.9em}.mkt-box{border:1px solid #eaeef4;border-radius:.72em;padding:.82em .92em .9em;background:#fff;min-width:0}.mkt-wide{grid-column:1/-1}.mkt-h{display:flex;align-items:center;gap:.44em;color:#5b6472;font-size:.95em;font-weight:700;margin-bottom:.62em}.mkt-h::before{content:'';width:.28em;height:.95em;border-radius:.14em;background:#c9d3e0}.mkt-list{display:block}.idx-item{display:flex;align-items:baseline;gap:.5em;padding:.3em .52em;border-radius:.46em;margin-bottom:.26em;background:#f7f9fc}.idx-item:last-child{margin-bottom:0}.idx-item.up{background:linear-gradient(90deg,#fdf1f0,#fff)}.idx-item.down{background:linear-gradient(90deg,#eef8f2,#fff)}.idx-n{color:#414a56;font-weight:600}.idx-v{margin-left:auto;color:#2a3038;font-variant-numeric:tabular-nums}.idx-p{flex:0 0 auto;min-width:4.6em;text-align:center;border-radius:.4em;padding:.08em .3em;font-weight:700;font-variant-numeric:tabular-nums}.idx-item.up .idx-p{background:#fdecea}.idx-item.down .idx-p{background:#e7f6ec}.br-bar{display:flex;height:.52em;border-radius:.26em;overflow:hidden;background:#eef1f5;margin:0 0 .62em}.br-bar i{display:block;height:100%}.br-bar i.up{background:#e05a52}.br-bar i.flat{background:#c8ced8}.br-bar i.down{background:#3aa06a}.mkt-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:.44em}.mk-stat{display:flex;flex-direction:column;align-items:center;gap:.08em;background:#f7f9fc;border:1px solid #eef2f7;border-radius:.5em;padding:.44em .3em}.mk-stat.up{background:#fdf3f2;border-color:#f8dcd9}.mk-stat.down{background:#eef8f2;border-color:#d8ecdf}.mk-stat-n{font-size:1.24em;font-weight:800;line-height:1.24;font-variant-numeric:tabular-nums}.mk-stat-l{color:#8a929e;font-size:.85em}.mkt-note{color:#8a929e;font-size:.9em;margin-top:.62em;line-height:1.6}.mk-row{display:flex;align-items:center;gap:.5em;flex-wrap:wrap;font-size:1em;line-height:1.8;padding:.14em 0;border-bottom:1px dashed #eef1f5}.mk-row:last-child{border-bottom:0}.mk-rank{flex:0 0 auto;min-width:1.5em;height:1.5em;line-height:1.5em;text-align:center;border-radius:.34em;background:#eef2f8;color:#69737f;font-size:.84em;font-weight:700;font-variant-numeric:tabular-nums}.mk-rank.top{background:linear-gradient(135deg,#f0b23c,#e2662f);color:#fff}.mk-k{color:#1f252c;font-weight:700}.mk-meta{color:#8a929e;font-size:.93em}.mk-best{margin-left:auto;color:#4a525c;font-size:.93em}.mk-link{color:#1257a8;text-decoration:none;font-weight:600;max-width:8em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.mk-p{flex:0 0 auto;margin-left:auto;min-width:4.4em;text-align:center;border-radius:.4em;padding:.08em .3em;font-weight:700;font-variant-numeric:tabular-nums}.mk-p.f-up{background:#fdecea}.mk-p.f-down{background:#e7f6ec}.mk-p.f-flat{background:#f1f3f6}.mk-fund{margin-left:.66em;min-width:5em;text-align:right;color:#6b737e;font-size:.93em;font-variant-numeric:tabular-nums}.mkt-hot{display:grid;grid-template-columns:repeat(auto-fit,minmax(16.8em,1fr));gap:.2em 1.5em}.mkt-hot-col{min-width:0}.mkt-hot-h{display:flex;align-items:center;gap:.4em;color:#5b6472;font-size:.9em;font-weight:700;margin:.2em 0 .32em}.mkt-hot-h::before{content:'';width:.34em;height:.34em;border-radius:50%;background:#c9d3e0}.f-flat{color:#6b7280}body.mk-phone .mkt{font-size:28px}";
@@ -519,7 +555,7 @@ function toHtml(rows, meta, opts) {
     '<!doctype html>',
     '<html lang=' + Q + 'zh-CN' + Q + '><head><meta charset=' + Q + 'utf-8' + Q + '><meta name=' + Q + 'viewport' + Q + ' content=' + Q + viewportContent + Q + '>',
     '<title>财联社栏目新闻 ' + esc(meta.title || '') + '</title>',
-    '<style>' + CSS_BASE + mobileCss + BAR_CSS + EXTRA_CSS + MARKET_CSS + BOARD_CSS + '</style></head><body>',
+    '<style>' + CSS_BASE + mobileCss + BAR_CSS + EXTRA_CSS + MARKET_CSS + BOARD_CSS + MKT_TOGGLE_CSS + '</style></head><body>',
     '<h1>' + esc(meta.title || '财联社自选股 · 目标栏目新闻') + '</h1>',
     '<div class=' + Q + 'meta' + Q + '>区间 ' + esc(meta.range) + ' ｜ 共 ' + rows.length + ' 条 ｜ 股票池 ' + esc(meta.poolLabel) + ' ｜ 生成于 ' + esc(meta.generatedAt) + links + '</div>',
     hintHtml,
@@ -530,6 +566,7 @@ function toHtml(rows, meta, opts) {
     body,
     '</tbody></table></div>',
     script,
+    CARD_SCRIPT,
     '</body></html>',
   ].join('\n');
 }

@@ -18,7 +18,7 @@ const research = require('./research.js');
 const CACHE_FILE = path.join(collectMod.DATA_DIR, 'market.json');
 const TTL_MS = 15 * 60 * 1000;
 // 卡片字段结构变化时递增：版本不一致就重新抓取，避免旧结构缓存渲染出缺字段的卡片
-const CACHE_VERSION = 4;
+const CACHE_VERSION = 5;
 const CONCEPT_TTL_MS = 7 * 24 * 3600 * 1000; // 个股行业/概念变化很慢，缓存 7 天
 const GAINER_SAMPLE = 60; // 用涨幅榜前 N 只聚合领涨行业/主题
 const FUND_SAMPLE = 40;   // 额外取主力资金榜前 N 只的题材，让「明日看点」的板块样本更宽
@@ -157,7 +157,7 @@ function buildOutlook(snap, concepts) {
   const agg = new Map();
   const add = function (name, x) {
     if (!name) return;
-    if (!agg.has(name)) agg.set(name, { name: name, n: 0, sum: 0, up: 0, strong: 0, limitUp: 0, fund: 0 });
+    if (!agg.has(name)) agg.set(name, { name: name, n: 0, sum: 0, up: 0, strong: 0, limitUp: 0, fund: 0, members: [] });
     const a = agg.get(name);
     a.n++;
     a.sum += x.pct;
@@ -165,6 +165,7 @@ function buildOutlook(snap, concepts) {
     if (x.pct >= 5) a.strong++;
     if (x.pct >= 9.8) a.limitUp++;
     a.fund += x.fund;
+    a.members.push({ code: x.code, name: x.name, pct: x.pct, fund: x.fund });
   };
   let coverage = 0;
   let coveredUp = 0;
@@ -183,7 +184,10 @@ function buildOutlook(snap, concepts) {
     const fundYi = a.fund / 1e8;
     const score = Math.min(Math.max(avgPct, 0), 10) / 10 * 40 + upRatio * 25 +
       Math.min(strongRatio / 0.3, 1) * 20 + Math.min(Math.max(fundYi, 0), 5) / 5 * 15;
-    return { name: a.name, n: a.n, avgPct: round2(avgPct), upPct: Math.round(upRatio * 100), strong: a.strong, limitUp: a.limitUp, fundYi: round2(fundYi), score: Math.round(score) };
+    const stocks = a.members.slice().sort(function (u, v) { return v.pct - u.pct; }).slice(0, 12).map(function (u) {
+      return { code: u.code, name: u.name, pct: round2(u.pct), fundYi: round2(u.fund / 1e8) };
+    });
+    return { name: a.name, n: a.n, avgPct: round2(avgPct), upPct: Math.round(upRatio * 100), strong: a.strong, limitUp: a.limitUp, fundYi: round2(fundYi), score: Math.round(score), stocks: stocks };
   }).sort(function (a, b) { return b.score - a.score; });
 
   const topNames = new Set(sectors.slice(0, 6).map(function (s) { return s.name; }));
@@ -268,11 +272,12 @@ function rankThemes(gainers, concepts) {
   const byIndustry = new Map();
   const push = function (map, key, item) {
     if (!key) return;
-    if (!map.has(key)) map.set(key, { name: key, pctSum: 0, n: 0, best: null });
+    if (!map.has(key)) map.set(key, { name: key, pctSum: 0, n: 0, best: null, members: [] });
     const agg = map.get(key);
     agg.pctSum += item.pct;
     agg.n++;
     if (!agg.best || item.pct > agg.best.pct) agg.best = item;
+    agg.members.push({ code: item.code, name: item.name, pct: item.pct });
   };
   for (const g of gainers) {
     const c = concepts[g.code];
@@ -286,7 +291,17 @@ function rankThemes(gainers, concepts) {
       .sort(function (a, b) { return (b.n - a.n) || (b.pctSum / b.n - a.pctSum / a.n); })
       .slice(0, limit)
       .map(function (x) {
-        return { name: x.name, n: x.n, avgPct: Math.round((x.pctSum / x.n) * 100) / 100, best: x.best ? { name: x.best.name, pct: Math.round(x.best.pct * 100) / 100 } : null };
+        // 成分股明细用于页面上「点击板块展开」的列表
+        const stocks = x.members.slice().sort(function (a, b) { return b.pct - a.pct; }).slice(0, 12).map(function (m) {
+          return { code: m.code, name: m.name, pct: Math.round(m.pct * 100) / 100 };
+        });
+        return {
+          name: x.name,
+          n: x.n,
+          avgPct: Math.round((x.pctSum / x.n) * 100) / 100,
+          best: x.best ? { name: x.best.name, pct: Math.round(x.best.pct * 100) / 100 } : null,
+          stocks: stocks,
+        };
       });
   };
   return { themes: toList(byConcept, 6), industries: toList(byIndustry, 4) };

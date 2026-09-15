@@ -183,7 +183,7 @@ function technicalHtml(value) {
 }
 
 // ---------------- 当天行情卡片（表格之前） ----------------
-// 数据来自 src/market.js：全市场 5000+ 只快照汇总，不是抽样。
+// 数据来自 src/market.js：沪深两市 5000+ 只快照汇总，不是抽样。
 function mkPct(v) {
   const n = Number(v);
   if (!Number.isFinite(n)) return '—';
@@ -198,6 +198,11 @@ function mkCls(v) {
   const n = Number(v);
   return n > 0 ? 'f-up' : n < 0 ? 'f-down' : 'f-flat';
 }
+// 卡片内的色块底色只有涨/跌/中性三态，和文字颜色类分开
+function mkTone(v) {
+  const n = Number(v);
+  return n > 0 ? 'up' : n < 0 ? 'down' : '';
+}
 function mkInt(v) {
   const n = Number(v);
   return Number.isFinite(n) ? String(n) : '0';
@@ -209,24 +214,34 @@ function marketCardHtml(card) {
   const b = card.breadth;
 
   const idxRows = (card.indexes || []).map(function (x) {
-    return '<div class="mk-row"><span class="mk-k">' + esc(x.name) + '</span>' +
-      '<span class="mk-v">' + (Number.isFinite(Number(x.px)) ? Number(x.px).toFixed(2) : '—') + '</span>' +
-      '<span class="mk-p mk-right ' + mkCls(x.pct) + '">' + mkPct(x.pct) + '</span></div>';
+    const pct = Number(x.pct);
+    return '<div class="idx-item ' + mkTone(pct) + '"><span class="idx-n">' + esc(x.name) + '</span>' +
+      '<span class="idx-v">' + (Number.isFinite(Number(x.px)) ? Number(x.px).toFixed(2) : '—') + '</span>' +
+      '<span class="idx-p ' + mkCls(pct) + '">' + mkPct(pct) + '</span></div>';
   }).join('');
+
+  // 涨 / 平 / 跌 家数占比条：一眼看出多空结构
+  const sum = Math.max(1, (Number(b.up) || 0) + (Number(b.down) || 0) + (Number(b.flat) || 0));
+  const wPct = function (v) { return ((Number(v) || 0) / sum * 100).toFixed(2) + '%'; };
+  const brBar = '<div class="br-bar"><i class="up" style=' + Q + 'width:' + wPct(b.up) + Q + '></i>' +
+    '<i class="flat" style=' + Q + 'width:' + wPct(b.flat) + Q + '></i>' +
+    '<i class="down" style=' + Q + 'width:' + wPct(b.down) + Q + '></i></div>';
 
   const stats = [
-    ['f-up', mkInt(b.up), '上涨'],
-    ['f-down', mkInt(b.down), '下跌'],
-    ['', mkInt(b.flat), '平盘'],
-    ['f-up', mkInt(b.limitUp), '涨停'],
-    ['f-down', mkInt(b.limitDown), '跌停'],
-    [mkCls(b.fundYi), mkYi(b.fundYi), '主力净流入'],
-  ].map(function (s) {
-    return '<div class="mk-stat"><span class="mk-stat-n ' + s[0] + '">' + s[1] + '</span><span class="mk-stat-l">' + s[2] + '</span></div>';
+    ['up', 'f-up', mkInt(b.up), '上涨'],
+    ['down', 'f-down', mkInt(b.down), '下跌'],
+    ['', '', mkInt(b.flat), '平盘'],
+    ['up', 'f-up', mkInt(b.limitUp), '涨停'],
+    ['down', 'f-down', mkInt(b.limitDown), '跌停'],
+    [mkTone(b.fundYi), mkCls(b.fundYi), mkYi(b.fundYi), '主力净流入'],
+  ].map(function (t) {
+    return '<div class="mk-stat ' + t[0] + '"><span class="mk-stat-n ' + t[1] + '">' + t[2] + '</span>' +
+      '<span class="mk-stat-l">' + t[3] + '</span></div>';
   }).join('');
 
-  const themeRows = (card.themes || []).map(function (t) {
-    return '<div class="mk-row"><span class="mk-k">' + esc(t.name) + '</span>' +
+  const themeRows = (card.themes || []).map(function (t, i) {
+    return '<div class="mk-row"><span class="mk-rank' + (i < 3 ? ' top' : '') + '">' + (i + 1) + '</span>' +
+      '<span class="mk-k">' + esc(t.name) + '</span>' +
       '<span class="mk-meta">' + mkInt(t.n) + ' 只 · 均涨 ' + mkPct(t.avgPct) + '</span>' +
       (t.best ? '<span class="mk-best">' + esc(t.best.name) + ' <b class="' + mkCls(t.best.pct) + '">' + mkPct(t.best.pct) + '</b></span>' : '') +
       '</div>';
@@ -236,7 +251,7 @@ function marketCardHtml(card) {
   }).join('、');
 
   const hotRow = function (x, i) {
-    return '<div class="mk-row"><span class="mk-rank">' + (i + 1) + '</span>' +
+    return '<div class="mk-row"><span class="mk-rank' + (i < 3 ? ' top' : '') + '">' + (i + 1) + '</span>' +
       '<a class="mk-link" href=' + Q + 'https://quote.eastmoney.com/' + encodeURIComponent(x.code) + '.html' + Q +
       ' target=' + Q + '_blank' + Q + ' rel=' + Q + 'noopener noreferrer' + Q + '>' + esc(x.name) + '</a>' +
       '<span class="mk-p ' + mkCls(x.pct) + '">' + mkPct(x.pct) + '</span>' +
@@ -246,10 +261,10 @@ function marketCardHtml(card) {
   return [
     '<section class="mkt">',
     '<div class="mkt-hd"><strong>当天行情</strong><span class="mkt-sub">沪深两市 ' + mkInt(card.total) +
-      ' 只 ｜ 截止 ' + esc(card.updatedText || '') + '（点链接可看个股行情）</span></div>',
+      ' 只 ｜ 截止 ' + esc(card.updatedText || '') + '（点名称看行情）</span></div>',
     '<div class="mkt-grid">',
     '<div class="mkt-box"><div class="mkt-h">主要指数</div><div class="mkt-list">' + idxRows + '</div></div>',
-    '<div class="mkt-box"><div class="mkt-h">市场涨跌</div><div class="mkt-stats">' + stats + '</div>' +
+    '<div class="mkt-box"><div class="mkt-h">市场涨跌</div>' + brBar + '<div class="mkt-stats">' + stats + '</div>' +
       '<div class="mkt-note">涨超5% ' + mkInt(b.up5) + ' 只 ｜ 跌超5% ' + mkInt(b.down5) + ' 只</div></div>',
     '<div class="mkt-box"><div class="mkt-h">领涨主题 / 板块</div><div class="mkt-list">' + themeRows + '</div>' +
       (indLine ? '<div class="mkt-note">行业：' + indLine + '</div>' : '') + '</div>',
@@ -259,10 +274,10 @@ function marketCardHtml(card) {
       '</div></div>',
     '</div>',
     '</section>',
-  ].join('');
+  ].join('\n');
 }
 
-const MARKET_CSS = ".mkt{background:#fff;border:1px solid #e5e5e5;border-radius:.8em;padding:.96em 1.12em;margin:0 0 1.12em;font-size:12.5px}.mkt-hd{display:flex;align-items:baseline;gap:.8em;flex-wrap:wrap;margin-bottom:.8em}.mkt-hd strong{font-size:1.2em}.mkt-sub{color:#888;font-size:.96em}.mkt-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(19.8em,1fr));gap:.8em}.mkt-box{border:1px solid #eef0f2;border-radius:.64em;padding:.72em .88em;background:#fcfcfd;min-width:0}.mkt-wide{grid-column:1/-1}.mkt-h{color:#6b7280;font-size:.96em;font-weight:700;margin-bottom:.48em}.mk-row{display:flex;align-items:baseline;gap:.64em;flex-wrap:wrap;font-size:1em;line-height:1.9;border-bottom:1px dashed #eef0f2}.mk-row:last-child{border-bottom:0}.mk-k{color:#20252b;font-weight:600}.mk-v{font-variant-numeric:tabular-nums;color:#3b4149}.mk-p{font-weight:600;font-variant-numeric:tabular-nums}.mk-right{margin-left:auto}.mk-meta{color:#888;font-size:.96em}.mk-best{margin-left:auto;color:#555;font-size:.96em}.mk-rank{color:#b0b4bb;font-size:.92em;min-width:1em;font-variant-numeric:tabular-nums}.mk-link{color:#1257a8;text-decoration:none;max-width:8em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.mk-fund{margin-left:auto;color:#6b7280;font-size:.96em;font-variant-numeric:tabular-nums}.mkt-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:.48em}.mk-stat{display:flex;flex-direction:column;align-items:center;background:#fff;border:1px solid #eef0f2;border-radius:.56em;padding:.4em .32em;min-width:0}.mk-stat-n{font-size:1.2em;font-weight:700;font-variant-numeric:tabular-nums;line-height:1.35}.mk-stat-l{color:#888;font-size:.88em}.mkt-note{color:#888;font-size:.92em;margin-top:.56em;line-height:1.65}.mkt-hot{display:grid;grid-template-columns:repeat(auto-fit,minmax(16.8em,1fr));gap:.16em 1.44em}.mkt-hot-col{min-width:0}.mkt-hot-h{color:#6b7280;font-size:.92em;font-weight:700;margin:.16em 0 .24em}.f-flat{color:#6b7280}body.mk-phone .mkt{font-size:28px}";
+const MARKET_CSS = ".mkt{position:relative;background:linear-gradient(180deg,#fff 0%,#f7f9fc 100%);border:1px solid #e3e8ef;border-radius:1em;padding:1.16em 1.2em 1.2em;margin:0 0 1.3em;box-shadow:0 1px 2px rgba(16,24,40,.04),0 10px 26px -16px rgba(16,24,40,.28);font-size:12.5px}.mkt::before{content:'';position:absolute;left:0;right:0;top:0;height:.26em;border-radius:1em 1em 0 0;background:linear-gradient(90deg,#d93025 0%,#e8873a 46%,#2f9e5f 100%);opacity:.9}.mkt-hd{display:flex;align-items:baseline;gap:.6em;flex-wrap:wrap;margin-bottom:.92em}.mkt-hd strong{font-size:1.26em;letter-spacing:.01em}.mkt-sub{color:#8a929e;font-size:.95em}.mkt-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(19.8em,1fr));gap:.9em}.mkt-box{border:1px solid #eaeef4;border-radius:.72em;padding:.82em .92em .9em;background:#fff;min-width:0}.mkt-wide{grid-column:1/-1}.mkt-h{display:flex;align-items:center;gap:.44em;color:#5b6472;font-size:.95em;font-weight:700;margin-bottom:.62em}.mkt-h::before{content:'';width:.28em;height:.95em;border-radius:.14em;background:#c9d3e0}.mkt-list{display:block}.idx-item{display:flex;align-items:baseline;gap:.5em;padding:.3em .52em;border-radius:.46em;margin-bottom:.26em;background:#f7f9fc}.idx-item:last-child{margin-bottom:0}.idx-item.up{background:linear-gradient(90deg,#fdf1f0,#fff)}.idx-item.down{background:linear-gradient(90deg,#eef8f2,#fff)}.idx-n{color:#414a56;font-weight:600}.idx-v{margin-left:auto;color:#2a3038;font-variant-numeric:tabular-nums}.idx-p{flex:0 0 auto;min-width:4.6em;text-align:center;border-radius:.4em;padding:.08em .3em;font-weight:700;font-variant-numeric:tabular-nums}.idx-item.up .idx-p{background:#fdecea}.idx-item.down .idx-p{background:#e7f6ec}.br-bar{display:flex;height:.52em;border-radius:.26em;overflow:hidden;background:#eef1f5;margin:0 0 .62em}.br-bar i{display:block;height:100%}.br-bar i.up{background:#e05a52}.br-bar i.flat{background:#c8ced8}.br-bar i.down{background:#3aa06a}.mkt-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:.44em}.mk-stat{display:flex;flex-direction:column;align-items:center;gap:.08em;background:#f7f9fc;border:1px solid #eef2f7;border-radius:.5em;padding:.44em .3em}.mk-stat.up{background:#fdf3f2;border-color:#f8dcd9}.mk-stat.down{background:#eef8f2;border-color:#d8ecdf}.mk-stat-n{font-size:1.24em;font-weight:800;line-height:1.24;font-variant-numeric:tabular-nums}.mk-stat-l{color:#8a929e;font-size:.85em}.mkt-note{color:#8a929e;font-size:.9em;margin-top:.62em;line-height:1.6}.mk-row{display:flex;align-items:center;gap:.5em;flex-wrap:wrap;font-size:1em;line-height:1.8;padding:.14em 0;border-bottom:1px dashed #eef1f5}.mk-row:last-child{border-bottom:0}.mk-rank{flex:0 0 auto;min-width:1.5em;height:1.5em;line-height:1.5em;text-align:center;border-radius:.34em;background:#eef2f8;color:#69737f;font-size:.84em;font-weight:700;font-variant-numeric:tabular-nums}.mk-rank.top{background:linear-gradient(135deg,#f0b23c,#e2662f);color:#fff}.mk-k{color:#1f252c;font-weight:700}.mk-meta{color:#8a929e;font-size:.93em}.mk-best{margin-left:auto;color:#4a525c;font-size:.93em}.mk-link{color:#1257a8;text-decoration:none;font-weight:600;max-width:8em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.mk-p{flex:0 0 auto;margin-left:auto;min-width:4.4em;text-align:center;border-radius:.4em;padding:.08em .3em;font-weight:700;font-variant-numeric:tabular-nums}.mk-p.f-up{background:#fdecea}.mk-p.f-down{background:#e7f6ec}.mk-p.f-flat{background:#f1f3f6}.mk-fund{margin-left:.66em;min-width:5em;text-align:right;color:#6b737e;font-size:.93em;font-variant-numeric:tabular-nums}.mkt-hot{display:grid;grid-template-columns:repeat(auto-fit,minmax(16.8em,1fr));gap:.2em 1.5em}.mkt-hot-col{min-width:0}.mkt-hot-h{display:flex;align-items:center;gap:.4em;color:#5b6472;font-size:.9em;font-weight:700;margin:.2em 0 .32em}.mkt-hot-h::before{content:'';width:.34em;height:.34em;border-radius:50%;background:#c9d3e0}.f-flat{color:#6b7280}body.mk-phone .mkt{font-size:28px}";
 
 
 const CSS_BASE = "body{font-family:'Microsoft YaHei',system-ui,sans-serif;margin:24px;color:#1c1c1e;background:#fafafa}h1{font-size:20px;margin:0 0 6px}.meta{color:#666;font-size:13px;margin-bottom:16px}.meta a{white-space:nowrap}.hint{color:#888;font-size:12.5px}table{border-collapse:collapse;width:100%;background:#fff;font-size:13px;table-layout:fixed}th,td{border:1px solid #e5e5e5;padding:8px 10px;vertical-align:top;text-align:left;overflow-wrap:anywhere;word-break:break-word}th{background:#f2f3f5;position:sticky;top:0;z-index:2}td.t{white-space:normal;color:#555;font-variant-numeric:tabular-nums}td.txt{line-height:1.6;white-space:pre-wrap}td.src{white-space:nowrap;color:#888;font-size:12px}.pf{display:inline-block;background:#fff1e6;color:#c2410c;border:1px solid #ffd7bd;border-radius:3px;padding:1px 6px;white-space:nowrap}.pl{display:inline-block;background:#eef4fb;color:#1257a8;border:1px solid #cfe0f2;border-radius:3px;padding:1px 6px;white-space:nowrap;font-size:12px;margin:0 3px 2px 0}a{color:#1257a8;text-decoration:none}a:hover{text-decoration:underline}.tw{background:#fff}" ;

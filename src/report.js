@@ -336,6 +336,13 @@ function newsBoardHtml(rows) {
       .sort(function (a, b) { return (b.n - a.n) || ((b.nn ? b.sum / b.nn : -999) - (a.nn ? a.sum / a.nn : -999)); })
       .slice(0, limit);
   };
+  // 胜率排序：样本 < 2 条的一律排除，否则「1 条 +20%」会霸榜成 100%
+  const byWin = function (map, limit) {
+    return Array.from(map.values())
+      .filter(function (x) { return x.nn >= 2; })
+      .sort(function (a, b) { return (b.wins / b.nn - a.wins / a.nn) || (b.nn - a.nn); })
+      .slice(0, limit);
+  };
   const cells = function (item, i, nameHtml, meta) {
     return '<div class="mk-row"><span class="mk-rank' + (i < 3 ? ' top' : '') + '">' + (i + 1) + '</span>' +
       nameHtml +
@@ -351,6 +358,14 @@ function newsBoardHtml(rows) {
   }).join('');
   const columnRows = byAvg(column, 8).map(function (t, i) {
     return cells(t, i, '<span class="mk-k">' + esc(t.name) + '</span>', t.n + ' 条');
+  }).join('');
+  const winRows = byWin(column, 8).map(function (t, i) {
+    const rate = t.wins / t.nn;
+    return '<div class="mk-row"><span class="mk-rank' + (i < 3 ? ' top' : '') + '">' + (i + 1) + '</span>' +
+      '<span class="mk-k">' + esc(t.name) + '</span>' +
+      '<span class="mk-meta">' + t.n + ' 条</span>' +
+      '<span class="mk-p ' + mkCls(rate - 0.5) + '">胜率 ' + boardWin(t) + '</span>' +
+      '<span class="mk-fund">' + boardPct(t) + '</span></div>';
   }).join('');
   const stockRows = byAvg(stock, 8).map(function (t, i) {
     const code = Array.from(t.stocks)[0];
@@ -377,6 +392,7 @@ function newsBoardHtml(rows) {
     '<div class="mkt-grid">',
     '<div class="mkt-box"><div class="mkt-h">最热题材 / 板块（按提及次数）</div><div class="mkt-list">' + topicRows + '</div></div>',
     '<div class="mkt-box"><div class="mkt-h">各栏目表现（按平均涨幅）</div><div class="mkt-list">' + columnRows + '</div></div>',
+    '<div class="mkt-box"><div class="mkt-h">各栏目胜率（样本 ≥ 2 条）</div><div class="mkt-list">' + winRows + '</div></div>',
     '<div class="mkt-box"><div class="mkt-h">个股表现（按平均涨幅）</div><div class="mkt-list">' + stockRows + '</div></div>',
     '</div>',
     '</section>',

@@ -70,6 +70,7 @@ jobs:
           mkdir -p data
           curl -fsSL --retry 2 https://yunqingzou-bit.github.io/cls-news-dashboard/research.json -o data/research.json || true
           curl -fsSL --retry 2 https://yunqingzou-bit.github.io/cls-news-dashboard/technical.json -o data/technical.json || true
+          curl -fsSL --retry 2 https://yunqingzou-bit.github.io/cls-news-dashboard/market.json -o data/market.json || true
 
       - name: 抓取（只跑沪深A股池，避免把个人自选股带进公开页面）
         env:
@@ -95,6 +96,7 @@ jobs:
           cp out/status.json          _site/status.json
           cp data/research.json _site/research.json
           cp data/technical.json _site/technical.json
+          cp data/market.json _site/market.json
           if [ -f out/stockbee/index.html ]; then
             cp out/stockbee/index.html _site/stockbee/index.html
             cp out/stockbee.csv        _site/stockbee/stockbee.csv

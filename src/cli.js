@@ -8,6 +8,7 @@ const cls = require('./cls.js');
 const research = require('./research.js');
 const technical = require('./technical.js');
 const top20 = require('./top20.js');
+const market = require('./market.js');
 
 function arg(name, fallback) {
   const i = process.argv.indexOf('--' + name);
@@ -131,6 +132,18 @@ function siteLinks() { return process.argv.includes('--site-links'); }
     poolLabel: siteNews ? '财联社深度全分类' : selected.map(function (p) { return p.name + '（' + p.count + ' 只）'; }).join(' / '),
     generatedAt: new Date().toLocaleString('zh-CN'),
   };
+  // 当天行情卡片：全市场快照汇总（涨幅榜/主力净流入/领涨题材），失败不影响表格导出
+  if (!process.argv.includes('--no-market')) {
+    try {
+      meta.card = await market.summary({});
+      const b = meta.card.breadth;
+      console.log('当天行情卡片：全市场 ' + meta.card.total + ' 只 ｜ 涨 ' + b.up + ' / 跌 ' + b.down +
+        ' ｜ 领涨主题 ' + (meta.card.themes[0] ? meta.card.themes[0].name : '—') +
+        ' ｜ 主力净流入 ' + b.fundYi + ' 亿');
+    } catch (e) {
+      console.log('当天行情卡片：本轮抓取失败（' + String((e && e.message) || e) + '），页面沿用上一版');
+    }
+  }
   const out = report.exportAll(rows, meta, {
     fileBase: 'cls-news',
     layout: 'table',

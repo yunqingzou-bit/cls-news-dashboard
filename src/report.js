@@ -182,6 +182,89 @@ function technicalHtml(value) {
   });
 }
 
+// ---------------- 当天行情卡片（表格之前） ----------------
+// 数据来自 src/market.js：全市场 5000+ 只快照汇总，不是抽样。
+function mkPct(v) {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return '—';
+  return (n > 0 ? '+' : '') + n.toFixed(2) + '%';
+}
+function mkYi(v) {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return '—';
+  return (n > 0 ? '+' : '') + n.toFixed(2) + '亿';
+}
+function mkCls(v) {
+  const n = Number(v);
+  return n > 0 ? 'f-up' : n < 0 ? 'f-down' : 'f-flat';
+}
+function mkInt(v) {
+  const n = Number(v);
+  return Number.isFinite(n) ? String(n) : '0';
+}
+
+/** 当天行情小卡片：主要指数 + 市场涨跌 + 领涨主题/板块 + 最热门股票。 */
+function marketCardHtml(card) {
+  if (!card || !card.breadth) return '';
+  const b = card.breadth;
+
+  const idxRows = (card.indexes || []).map(function (x) {
+    return '<div class="mk-row"><span class="mk-k">' + esc(x.name) + '</span>' +
+      '<span class="mk-v">' + (Number.isFinite(Number(x.px)) ? Number(x.px).toFixed(2) : '—') + '</span>' +
+      '<span class="mk-p mk-right ' + mkCls(x.pct) + '">' + mkPct(x.pct) + '</span></div>';
+  }).join('');
+
+  const stats = [
+    ['f-up', mkInt(b.up), '上涨'],
+    ['f-down', mkInt(b.down), '下跌'],
+    ['', mkInt(b.flat), '平盘'],
+    ['f-up', mkInt(b.limitUp), '涨停'],
+    ['f-down', mkInt(b.limitDown), '跌停'],
+    [mkCls(b.fundYi), mkYi(b.fundYi), '主力净流入'],
+  ].map(function (s) {
+    return '<div class="mk-stat"><span class="mk-stat-n ' + s[0] + '">' + s[1] + '</span><span class="mk-stat-l">' + s[2] + '</span></div>';
+  }).join('');
+
+  const themeRows = (card.themes || []).map(function (t) {
+    return '<div class="mk-row"><span class="mk-k">' + esc(t.name) + '</span>' +
+      '<span class="mk-meta">' + mkInt(t.n) + ' 只 · 均涨 ' + mkPct(t.avgPct) + '</span>' +
+      (t.best ? '<span class="mk-best">' + esc(t.best.name) + ' <b class="' + mkCls(t.best.pct) + '">' + mkPct(t.best.pct) + '</b></span>' : '') +
+      '</div>';
+  }).join('');
+  const indLine = (card.industries || []).map(function (t) {
+    return esc(t.name) + '（' + mkInt(t.n) + ' 只 · ' + mkPct(t.avgPct) + '）';
+  }).join('、');
+
+  const hotRow = function (x, i) {
+    return '<div class="mk-row"><span class="mk-rank">' + (i + 1) + '</span>' +
+      '<a class="mk-link" href=' + Q + 'https://quote.eastmoney.com/' + encodeURIComponent(x.code) + '.html' + Q +
+      ' target=' + Q + '_blank' + Q + ' rel=' + Q + 'noopener noreferrer' + Q + '>' + esc(x.name) + '</a>' +
+      '<span class="mk-p ' + mkCls(x.pct) + '">' + mkPct(x.pct) + '</span>' +
+      '<span class="mk-fund">' + mkYi(x.fundYi) + '</span></div>';
+  };
+
+  return [
+    '<section class="mkt">',
+    '<div class="mkt-hd"><strong>当天行情</strong><span class="mkt-sub">全市场 ' + mkInt(card.total) +
+      ' 只 ｜ 截止 ' + esc(card.updatedText || '') + '（点链接可看个股行情）</span></div>',
+    '<div class="mkt-grid">',
+    '<div class="mkt-box"><div class="mkt-h">主要指数</div><div class="mkt-list">' + idxRows + '</div></div>',
+    '<div class="mkt-box"><div class="mkt-h">市场涨跌</div><div class="mkt-stats">' + stats + '</div>' +
+      '<div class="mkt-note">涨超5% ' + mkInt(b.up5) + ' 只 ｜ 跌超5% ' + mkInt(b.down5) + ' 只</div></div>',
+    '<div class="mkt-box"><div class="mkt-h">领涨主题 / 板块</div><div class="mkt-list">' + themeRows + '</div>' +
+      (indLine ? '<div class="mkt-note">行业：' + indLine + '</div>' : '') + '</div>',
+    '<div class="mkt-box mkt-wide"><div class="mkt-h">最热门股票</div><div class="mkt-hot">' +
+      '<div class="mkt-hot-col"><div class="mkt-hot-h">涨幅榜</div>' + (card.hotGain || []).map(hotRow).join('') + '</div>' +
+      '<div class="mkt-hot-col"><div class="mkt-hot-h">主力净流入榜</div>' + (card.hotFund || []).map(hotRow).join('') + '</div>' +
+      '</div></div>',
+    '</div>',
+    '</section>',
+  ].join('');
+}
+
+const MARKET_CSS = ".mkt{background:#fff;border:1px solid #e5e5e5;border-radius:.8em;padding:.96em 1.12em;margin:0 0 1.12em;font-size:12.5px}.mkt-hd{display:flex;align-items:baseline;gap:.8em;flex-wrap:wrap;margin-bottom:.8em}.mkt-hd strong{font-size:1.2em}.mkt-sub{color:#888;font-size:.96em}.mkt-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(19.8em,1fr));gap:.8em}.mkt-box{border:1px solid #eef0f2;border-radius:.64em;padding:.72em .88em;background:#fcfcfd;min-width:0}.mkt-wide{grid-column:1/-1}.mkt-h{color:#6b7280;font-size:.96em;font-weight:700;margin-bottom:.48em}.mk-row{display:flex;align-items:baseline;gap:.64em;flex-wrap:wrap;font-size:1em;line-height:1.9;border-bottom:1px dashed #eef0f2}.mk-row:last-child{border-bottom:0}.mk-k{color:#20252b;font-weight:600}.mk-v{font-variant-numeric:tabular-nums;color:#3b4149}.mk-p{font-weight:600;font-variant-numeric:tabular-nums}.mk-right{margin-left:auto}.mk-meta{color:#888;font-size:.96em}.mk-best{margin-left:auto;color:#555;font-size:.96em}.mk-rank{color:#b0b4bb;font-size:.92em;min-width:1em;font-variant-numeric:tabular-nums}.mk-link{color:#1257a8;text-decoration:none;max-width:8em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.mk-fund{margin-left:auto;color:#6b7280;font-size:.96em;font-variant-numeric:tabular-nums}.mkt-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:.48em}.mk-stat{display:flex;flex-direction:column;align-items:center;background:#fff;border:1px solid #eef0f2;border-radius:.56em;padding:.4em .32em;min-width:0}.mk-stat-n{font-size:1.2em;font-weight:700;font-variant-numeric:tabular-nums;line-height:1.35}.mk-stat-l{color:#888;font-size:.88em}.mkt-note{color:#888;font-size:.92em;margin-top:.56em;line-height:1.65}.mkt-hot{display:grid;grid-template-columns:repeat(auto-fit,minmax(16.8em,1fr));gap:.16em 1.44em}.mkt-hot-col{min-width:0}.mkt-hot-h{color:#6b7280;font-size:.92em;font-weight:700;margin:.16em 0 .24em}.f-flat{color:#6b7280}body.mk-phone .mkt{font-size:28px}";
+
+
 const CSS_BASE = "body{font-family:'Microsoft YaHei',system-ui,sans-serif;margin:24px;color:#1c1c1e;background:#fafafa}h1{font-size:20px;margin:0 0 6px}.meta{color:#666;font-size:13px;margin-bottom:16px}.meta a{white-space:nowrap}.hint{color:#888;font-size:12.5px}table{border-collapse:collapse;width:100%;background:#fff;font-size:13px;table-layout:fixed}th,td{border:1px solid #e5e5e5;padding:8px 10px;vertical-align:top;text-align:left;overflow-wrap:anywhere;word-break:break-word}th{background:#f2f3f5;position:sticky;top:0;z-index:2}td.t{white-space:normal;color:#555;font-variant-numeric:tabular-nums}td.txt{line-height:1.6;white-space:pre-wrap}td.src{white-space:nowrap;color:#888;font-size:12px}.pf{display:inline-block;background:#fff1e6;color:#c2410c;border:1px solid #ffd7bd;border-radius:3px;padding:1px 6px;white-space:nowrap}.pl{display:inline-block;background:#eef4fb;color:#1257a8;border:1px solid #cfe0f2;border-radius:3px;padding:1px 6px;white-space:nowrap;font-size:12px;margin:0 3px 2px 0}a{color:#1257a8;text-decoration:none}a:hover{text-decoration:underline}.tw{background:#fff}" ;
 
 // 表格版：手机上仍然是表格，靠横向滚动保证列宽，避免挤压与文字重叠
@@ -243,15 +326,16 @@ function toHtml(rows, meta, opts) {
     '<span class=' + Q + 'cnt' + Q + ' id=' + Q + 'cnt' + Q + '></span>',
     '</div>',
   ].join('');
-  const script = '<script>' + "(function(){\n  var rows = [].slice.call(document.querySelectorAll('tbody tr'));\n  var q = document.getElementById('q');\n  var pf = document.getElementById('pf');\n  var cnt = document.getElementById('cnt');\n  var hint = document.getElementById('hint');\n  if (hint && screen && screen.width && screen.width <= 760) {\n    hint.textContent = '已按屏幕整页适配：双指缩放或双击可放大查看细节';\n    hint.style.display = 'block';\n  }\n  if (!rows.length || !q || !pf) return;\n  var initialQuery = new URLSearchParams(location.search).get('q');\n  if (initialQuery) q.value = initialQuery;\n  var counts = {};\n  rows.forEach(function(tr){ var p = tr.getAttribute('data-prefix') || ''; counts[p] = (counts[p] || 0) + 1; });\n  Object.keys(counts).sort(function(a,b){ return counts[b] - counts[a]; }).forEach(function(p){\n    var o = document.createElement('option');\n    o.value = p; o.textContent = p + '（' + counts[p] + '）';\n    pf.appendChild(o);\n  });\n  var cache = rows.map(function(tr){ return (tr.textContent || '').toLowerCase(); });\n  function apply(){\n    var kw = q.value.trim().toLowerCase();\n    var p = pf.value;\n    var n = 0;\n    for (var i = 0; i < rows.length; i++) {\n      var ok = (!p || rows[i].getAttribute('data-prefix') === p) && (!kw || cache[i].indexOf(kw) > -1);\n      rows[i].style.display = ok ? '' : 'none';\n      if (ok) n++;\n    }\n    cnt.textContent = '显示 ' + n + ' / ' + rows.length + ' 条';\n  }\n  q.addEventListener('input', apply);\n  pf.addEventListener('change', apply);\n  apply();\n})();" + '<' + '/script>';
+  const script = '<script>' + "(function(){\n  var rows = [].slice.call(document.querySelectorAll('tbody tr'));\n  var q = document.getElementById('q');\n  var pf = document.getElementById('pf');\n  var cnt = document.getElementById('cnt');\n  var hint = document.getElementById('hint');\n  if (hint && screen && screen.width && screen.width <= 760) {\n    hint.textContent = '已按屏幕整页适配：双指缩放或双击可放大查看细节';\n    hint.style.display = 'block';\n  }\n  if (screen && screen.width && screen.width <= 760) document.body.classList.add('mk-phone');\n  if (!rows.length || !q || !pf) return;\n  var initialQuery = new URLSearchParams(location.search).get('q');\n  if (initialQuery) q.value = initialQuery;\n  var counts = {};\n  rows.forEach(function(tr){ var p = tr.getAttribute('data-prefix') || ''; counts[p] = (counts[p] || 0) + 1; });\n  Object.keys(counts).sort(function(a,b){ return counts[b] - counts[a]; }).forEach(function(p){\n    var o = document.createElement('option');\n    o.value = p; o.textContent = p + '（' + counts[p] + '）';\n    pf.appendChild(o);\n  });\n  var cache = rows.map(function(tr){ return (tr.textContent || '').toLowerCase(); });\n  function apply(){\n    var kw = q.value.trim().toLowerCase();\n    var p = pf.value;\n    var n = 0;\n    for (var i = 0; i < rows.length; i++) {\n      var ok = (!p || rows[i].getAttribute('data-prefix') === p) && (!kw || cache[i].indexOf(kw) > -1);\n      rows[i].style.display = ok ? '' : 'none';\n      if (ok) n++;\n    }\n    cnt.textContent = '显示 ' + n + ' / ' + rows.length + ' 条';\n  }\n  q.addEventListener('input', apply);\n  pf.addEventListener('change', apply);\n  apply();\n})();" + '<' + '/script>';
   return [
     '<!doctype html>',
     '<html lang=' + Q + 'zh-CN' + Q + '><head><meta charset=' + Q + 'utf-8' + Q + '><meta name=' + Q + 'viewport' + Q + ' content=' + Q + viewportContent + Q + '>',
     '<title>财联社栏目新闻 ' + esc(meta.title || '') + '</title>',
-    '<style>' + CSS_BASE + mobileCss + BAR_CSS + EXTRA_CSS + '</style></head><body>',
+    '<style>' + CSS_BASE + mobileCss + BAR_CSS + EXTRA_CSS + MARKET_CSS + '</style></head><body>',
     '<h1>' + esc(meta.title || '财联社自选股 · 目标栏目新闻') + '</h1>',
     '<div class=' + Q + 'meta' + Q + '>区间 ' + esc(meta.range) + ' ｜ 共 ' + rows.length + ' 条 ｜ 股票池 ' + esc(meta.poolLabel) + ' ｜ 生成于 ' + esc(meta.generatedAt) + links + '</div>',
     hintHtml,
+    marketCardHtml(meta.card),
     toolbar,
     '<div class=' + Q + 'tw' + Q + '><table>' + colgroup + '<thead><tr>' + th + '</tr></thead><tbody>',
     body,

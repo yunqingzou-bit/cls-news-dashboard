@@ -9,6 +9,7 @@ const collectMod = require('./collect.js');
 const report = require('./report.js');
 const cls = require('./cls.js');
 const research = require('./research.js');
+const market = require('./market.js');
 const schedule = require('./schedule.js');
 const technical = require('./technical.js');
 
@@ -104,11 +105,21 @@ async function refresh(reason) {
     });
     state.research = { total: rr.total, refreshed: rr.refreshed, cached: rr.cached, errors: rr.errors };
     const range = cls.fmtTime(nowSec - c.days * 86400).slice(0, 10) + ' ~ ' + cls.fmtTime(nowSec).slice(0, 10);
+    // 当天行情卡片：全市场快照汇总，失败不影响表格
+    let marketCard = null;
+    try {
+      marketCard = await market.summary({});
+      state.market = { total: marketCard.total, up: marketCard.breadth.up, down: marketCard.breadth.down, updatedText: marketCard.updatedText };
+      console.log('  当天行情卡片：全市场 ' + marketCard.total + ' 只 ｜ 涨 ' + marketCard.breadth.up + ' / 跌 ' + marketCard.breadth.down);
+    } catch (e) {
+      console.log('  当天行情卡片失败: ' + String((e && e.message) || e));
+    }
     report.exportAll(allRows, {
       title: '财联社 沪深A股 · 目标栏目新闻',
       range: range,
       poolLabel: poolList.map(function (x) { return x.name + '（' + x.count + ' 只）'; }).join(' / '),
       generatedAt: new Date().toLocaleString('zh-CN'),
+      card: marketCard,
     }, { fileBase: 'cls-news' });
     console.log('  完成：命中 ' + res.stats.matched + ' 条 / 表格 ' + allRows.length + ' 行 / ' + (state.lastDurationMs / 1000).toFixed(1) + 's');
     return { ok: true, stats: res.stats };

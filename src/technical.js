@@ -159,6 +159,99 @@ function mean(arr) {
   return arr.reduce(function (a, b) { return a + b; }, 0) / arr.length;
 }
 
+function clamp(v, lo, hi) {
+  return v < lo ? lo : v > hi ? hi : v;
+}
+
+/** MACD(12,26,9)：EMA 由第一根收盘起算；返回最新一根的 DIF/DEA/柱状与金叉死叉、柱状走强走弱。 */
+function macdOf(closes, fast, slow, signal) {
+  const f = fast || 12;
+  const s = slow || 26;
+  const g = signal || 9;
+  if (!closes || closes.length < s + g) return null;
+  const ema = function (n) {
+    const k = 2 / (n + 1);
+    let e = closes[0];
+    const out = [e];
+    for (let i = 1; i < closes.length; i++) { e = closes[i] * k + e * (1 - k); out.push(e); }
+    return out;
+  };
+  const ef = ema(f);
+  const es = ema(s);
+  const dif = closes.map(function (_, i) { return ef[i] - es[i]; });
+  const k = 2 / (g + 1);
+  let e = dif[0];
+  const dea = [e];
+  for (let i = 1; i < dif.length; i++) { e = dif[i] * k + e * (1 - k); dea.push(e); }
+  const n = dif.length - 1;
+  const hist = dif[n] - dea[n];
+  const prevHist = dif[n - 1] - dea[n - 1];
+  return {
+    dif: round(dif[n], 3),
+    dea: round(dea[n], 3),
+    hist: round(hist * 2, 3),
+    cross: hist > 0 ? '金叉' : '死叉',
+    turning: hist >= prevHist ? '走强' : '走弱',
+  };
+}
+
+/** KDJ(9,3,3)：RSV 取 9 日最高最低，K/D 各按 1/3 平滑（初值 50），J = 3K − 2D。 */
+function kdjOf(bars, n) {
+  const len = n || 9;
+  if (!bars || bars.length < len) return null;
+  let k = 50;
+  let d = 50;
+  for (let i = len - 1; i < bars.length; i++) {
+    const seg = bars.slice(i - len + 1, i + 1);
+    const hh = Math.max.apply(null, seg.map(function (x) { return x.h; }));
+    const ll = Math.min.apply(null, seg.map(function (x) { return x.l; }));
+    const rsv = hh > ll ? (bars[i].c - ll) / (hh - ll) * 100 : 50;
+    k = k * 2 / 3 + rsv / 3;
+    d = d * 2 / 3 + k / 3;
+  }
+  return { k: round(k, 1), d: round(d, 1), j: round(3 * k - 2 * d, 1), cross: k > d ? '金叉' : '死叉' };
+}
+
+/**
+ * 动能分（0-100）：把三个常用动能指标合成一个可比较、可排序的分值。
+ *   RSI(14)：50 以上越强越高，70 以上按超买回落 —— rsi ≤ 70 取 rsi，> 70 取 140 − rsi（权重 30%）
+ *   KDJ   ：50 + (K−D)×1.5（金叉强度）+ (K−50)×0.5（相对位置），J 超买(>100)/超卖(<0) 各扣 10（权重 30%）
+ *   MACD  ：50 + 柱状占股价百分比×10 + DIF 零轴上下的 ±12 + 柱状走强走弱的 ±6（权重 40%）
+ * 某个指标算不出（样本不够）时，把它的权重按比例分给其余指标，避免直接空值。
+ */
+function momentumScore(metrics) {
+  if (!metrics) return null;
+  const rsi = Number(metrics.rsi14);
+  if (!Number.isFinite(rsi)) return null;
+  const close = Number(metrics.close);
+  const kdj = metrics.kdj || null;
+  const macd = metrics.macd || null;
+  const rsiScore = clamp(rsi <= 70 ? rsi : 140 - rsi, 0, 100);
+  const kdjScore = kdj && Number.isFinite(Number(kdj.k)) && Number.isFinite(Number(kdj.d))
+    ? clamp(50 + (Number(kdj.k) - Number(kdj.d)) * 1.5 + (Number(kdj.k) - 50) * 0.5
+      - (Number(kdj.j) > 100 ? 10 : 0) - (Number(kdj.j) < 0 ? 10 : 0), 0, 100) : null;
+  const macdScore = macd && Number.isFinite(Number(macd.dif)) && Number.isFinite(Number(macd.dea)) && Number.isFinite(close) && close > 0
+    ? clamp(50 + (Number(macd.dif) - Number(macd.dea)) / close * 100 * 10
+      + (Number(macd.dif) > 0 ? 12 : -12) + (macd.turning === '走强' ? 6 : -6), 0, 100) : null;
+  const parts = [];
+  if (rsiScore !== null) parts.push([rsiScore, 0.3]);
+  if (kdjScore !== null) parts.push([kdjScore, 0.3]);
+  if (macdScore !== null) parts.push([macdScore, 0.4]);
+  if (!parts.length) return null;
+  const wsum = parts.reduce(function (a, x) { return a + x[1]; }, 0);
+  const score = parts.reduce(function (a, x) { return a + x[0] * x[1]; }, 0) / wsum;
+  return {
+    score: Math.round(score),
+    rsi: round(rsi, 1),
+    rsiState: rsi >= 70 ? '超买' : rsi <= 30 ? '超卖' : '中性',
+    rsiScore: Math.round(rsiScore),
+    kdj: kdjScore === null ? null : { k: kdj.k, d: kdj.d, j: kdj.j, cross: kdj.cross, score: Math.round(kdjScore),
+      state: Number(kdj.j) > 100 ? '超买' : Number(kdj.j) < 0 ? '超卖' : '中性' },
+    macd: macdScore === null ? null : { dif: macd.dif, dea: macd.dea, hist: macd.hist, cross: macd.cross, turning: macd.turning,
+      score: Math.round(macdScore), state: Number(macd.dif) > 0 ? '零轴上' : '零轴下' },
+  };
+}
+
 function swings(w, span) {
   const half = Math.floor((span || 5) / 2);
   const highs = [];
@@ -189,7 +282,8 @@ function compute(daily) {
       const pc = w[i - 1].c;
       youngRecent.push([w[i].day, round(w[i].c, 2), pc ? round((w[i].c / pc - 1) * 100, 2) : null]);
     }
-    return { kind: 'daily', ver: 3, young: true, bars: w.length, day: last0.day, close: round(last0.c, 2), recent: youngRecent };
+    return { kind: 'daily', ver: 4, young: true, bars: w.length, day: last0.day, close: round(last0.c, 2),
+      macd: macdOf(w.map(function (x) { return x.c; })), kdj: kdjOf(w), recent: youngRecent };
   }
   const closes = w.map(function (x) { return x.c; });
   const last = w[w.length - 1];
@@ -221,6 +315,8 @@ function compute(daily) {
     dn = dn * (1 - a) + Math.max(-ch, 0) * a;
   }
   const rsi = dn === 0 ? 100 : 100 - 100 / (1 + up / dn);
+  const macd = macdOf(closes);
+  const kdj = kdjOf(w);
 
   // 用最近 250 个交易日近似一年，作为高低点与位置参考
   const win52 = w.slice(-250);
@@ -255,7 +351,7 @@ function compute(daily) {
 
   return {
     kind: 'daily',
-    ver: 3,
+    ver: 4,
     day: last.day,
     bars: w.length,
     close: round(last.c, 2),
@@ -274,6 +370,8 @@ function compute(daily) {
     slope50: round(slope50, 3),
     volRatio: round(volRatio, 2),
     rsi14: round(rsi, 1),
+    macd: macd,
+    kdj: kdj,
     high52: round(high52, 2),
     low52: round(low52, 2),
     high52Day: high52w,
@@ -428,7 +526,7 @@ function isFresh(record, hours, latestDay) {
   // 失败记录 1 小时后重试，避免偶尔的接口抖动把某只股票长期钉在“取不到”
   if (record.error) return age < 3600000;
   // 旧版本按周线/旧均线组合计算，指标口径变更后自动作废重算
-  if (!record.metrics || record.metrics.kind !== 'daily' || record.metrics.ver !== 3) return false;
+  if (!record.metrics || record.metrics.kind !== 'daily' || record.metrics.ver !== 4) return false;
   // 早期记录没有 recent（T+0~T+5 用的日线窗口）：作废重算一次
   if (!Array.isArray(record.metrics.recent) || !record.metrics.recent.length) return false;
   // 走了兜底数据源（约 200 根，缺 250 日均线）的记录 2 小时后重试，新浪恢复后自动升级
@@ -556,6 +654,9 @@ module.exports = {
   compute: compute,
   analyse: analyse,
   conclusionFor: conclusionFor,
+  momentumScore: momentumScore,
+  macdOf: macdOf,
+  kdjOf: kdjOf,
   forwardReturns: forwardReturns,
   attachRows: attachRows,
   refresh: refresh,

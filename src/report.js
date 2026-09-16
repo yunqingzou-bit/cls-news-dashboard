@@ -516,9 +516,10 @@ function newsBoardHtml(rows, opts) {
       : '<span class="mk-k">' + esc(t.name) + '</span>';
     if (!useMomentum) return cells(t, i, nameHtml, t.n + ' 条');
     const mom = t.mom;
-    const momHtml = mom === null || mom === undefined
-      ? '<span class="mk-p">动能 —</span>'
-      : '<span class="mk-p ' + mkCls(mom) + '">动能 ' + mkPct(mom) + '</span>';
+    const score = mom && mom.score !== undefined && mom.score !== null ? mom.score : null;
+    const momHtml = score === null
+      ? '<span class="mk-p" title="RSI / KDJ / MACD 数据不足">动能 —</span>'
+      : '<span class="mk-p ' + mkCls(score - 50) + '" title=' + Q + esc(momentumText(mom)) + Q + '>动能 ' + score + '</span>';
     return '<div class="mk-row"><span class="mk-rank' + (i < 3 ? ' top' : '') + '">' + (i + 1) + '</span>' +
       nameHtml +
       '<span class="mk-meta">' + t.n + ' 条 · 胜率 ' + boardWin(t) + '</span>' +
@@ -537,7 +538,8 @@ function newsBoardHtml(rows, opts) {
   return [
     '<section class="mkt">',
     '<div class="mkt-hd"><strong>财联社新闻股票看板</strong><span class="mkt-sub">' +
-      '涨幅 = 该股在新闻当日的涨跌幅 ｜ 胜率 = 当日上涨记录占比 ｜ 一行为一条「新闻 × 股票」</span></div>',
+      '涨幅 = 该股在新闻当日的涨跌幅 ｜ 胜率 = 当日上涨记录占比 ｜ 一行为一条「新闻 × 股票」 ｜ ' +
+      '动能 = RSI(14)×30% + KDJ(9,3,3)×30% + MACD(12,26,9)×40%（各指标先折算成 0-100：RSI 70 以上按超买回落，KDJ 按 K/D 金叉强度与 J 超买超卖，MACD 按柱状强度与零轴位置；鼠标悬停看分解）</span></div>',
     summary,
     '<div class="mkt-grid">',
     '<div class="mkt-box"><div class="mkt-h">最热题材 / 板块（按提及次数）</div><div class="mkt-list">' + topicRows + '</div></div>',
@@ -590,6 +592,36 @@ const NAV_GROUPS = [
 ];
 
 const NAV_CSS = '.nav{display:flex;flex-wrap:wrap;gap:.5em 1.1em;align-items:center;background:#fff;border:1px solid #e3e8ef;border-radius:.8em;padding:.6em .8em;margin:0 0 1.1em;font-size:12.5px;box-shadow:0 1px 2px rgba(16,24,40,.04)}.nav-g{display:flex;flex-wrap:wrap;align-items:center;gap:.4em}.nav-g i{color:#8a929e;font-style:normal;font-weight:700}.nav-g a{display:inline-block;padding:.2em .62em;border:1px solid #d6e4ea;border-radius:999px;background:#f8fbfc;color:#155e75;text-decoration:none;white-space:nowrap}.nav-g a:hover{background:#e6f6f8;border-color:#9fd3dd}body.mk-phone .nav{font-size:26px}@media (max-width:760px){.nav{gap:.45em .8em;padding:.55em .6em}.nav-g{gap:.3em}}';
+
+/** 动能分的可读分解：用于看板行内提示（悬停）与明细页小字。 */
+function momentumText(mom) {
+  if (!mom || mom.score === undefined || mom.score === null) return '动能分：RSI / KDJ / MACD 数据不足';
+  const p = ['动能 ' + mom.score + '（0-100）'];
+  if (mom.rsi !== null && mom.rsi !== undefined) {
+    p.push('RSI(14) ' + mom.rsi + '（' + (mom.rsiState || '') + '）×30% = ' + mom.rsiScore);
+  }
+  if (mom.kdj) {
+    p.push('KDJ(9,3,3) K' + mom.kdj.k + '/D' + mom.kdj.d + '/J' + mom.kdj.j + '（' + mom.kdj.cross +
+      (mom.kdj.state && mom.kdj.state !== '中性' ? '·' + mom.kdj.state : '') + '）×30% = ' + mom.kdj.score);
+  }
+  if (mom.macd) {
+    p.push('MACD(12,26,9) DIF' + mom.macd.dif + '/DEA' + mom.macd.dea + '（' + mom.macd.cross + '·' +
+      mom.macd.turning + '·' + mom.macd.state + '）×40% = ' + mom.macd.score);
+  }
+  return p.join(' ｜ ');
+}
+
+/** 明细页小字：动能 84 · RSI 93.2（超买）· KDJ 金叉 · MACD 金叉 */
+function momentumBrief(mom) {
+  if (!mom || mom.score === undefined || mom.score === null) return '';
+  const p = ['动能 ' + mom.score];
+  if (mom.rsi !== null && mom.rsi !== undefined) {
+    p.push('RSI ' + mom.rsi + (mom.rsiState && mom.rsiState !== '中性' ? '（' + mom.rsiState + '）' : ''));
+  }
+  if (mom.kdj) p.push('KDJ ' + mom.kdj.cross);
+  if (mom.macd) p.push('MACD ' + mom.macd.cross);
+  return p.join(' · ');
+}
 
 function navHtml(opts) {
   if (opts && opts.nav === false) return '';
@@ -885,4 +917,5 @@ function pruneExports(base, keepSets) {
 }
 
 module.exports = { exportAll: exportAll, toCsv: toCsv, toHtml: toHtml, HEADERS: HEADERS, TEXT_SOURCE_LABEL: TEXT_SOURCE_LABEL, OUT_DIR: OUT_DIR,
-  researchHtml: researchHtml, technicalHtml: technicalHtml, outlookShort: outlookShort, boardStocks: boardStocks };
+  researchHtml: researchHtml, technicalHtml: technicalHtml, outlookShort: outlookShort, boardStocks: boardStocks,
+  momentumText: momentumText, momentumBrief: momentumBrief };

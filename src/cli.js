@@ -162,21 +162,24 @@ function siteLinks() { return process.argv.includes('--site-links'); }
       const techCache = technical.loadCache().stocks || {};
       const resCache = research.loadCache().stocks || {};
       const pool = report.boardStocks(rows).map(function (s) {
-        s.mom = outlook.momentumOf(techCache[s.code]);
+        s.mom = technical.momentumScore(techCache[s.code] && techCache[s.code].metrics);
         const rec = resCache[s.code];
         if (rec && rec.industry) s.theme = rec.industry;
         return s;
       });
       boardStocks = pool
-        .filter(function (s) { return s.mom !== null && s.mom !== undefined; })
+        // 三个指标齐全的才参与排序：只有 RSI 的记录（旧缓存 / 新上市）和三项齐全的分值不可比
+        .filter(function (s) { return s.mom && s.mom.macd && s.mom.kdj && s.mom.score !== null && s.mom.score !== undefined; })
         .sort(function (a, b) {
           const av = a.nn ? a.sum / a.nn : -999;
           const bv = b.nn ? b.sum / b.nn : -999;
-          return (b.mom - a.mom) || (bv - av) || (b.n - a.n);
+          return (b.mom.score - a.mom.score) || (bv - av) || (b.n - a.n);
         })
         .slice(0, Math.max(1, Number((cfg.outlook && cfg.outlook.boardStocks) || 8)));
       const bo = await outlook.runBoard(boardStocks, { config: cfg, newsRows: rows, siteLinks: siteLinks(), backHref: siteLinks() ? '../' : '' });
-      console.log('新闻看板个股：动能排序 ' + boardStocks.length + ' 只（首位 ' + (boardStocks[0] ? boardStocks[0].name + ' ' + boardStocks[0].mom + '%' : '—') + '）｜ 留档 ' + bo.days +
+      console.log('新闻看板个股：动能排序 ' + boardStocks.length + ' 只（池 ' + pool.length + ' 只，指标齐全 ' +
+        pool.filter(function (s) { return s.mom && s.mom.macd && s.mom.kdj; }).length + ' 只，首位 ' +
+        (boardStocks[0] ? boardStocks[0].name + ' 动能 ' + boardStocks[0].mom.score + '（RSI ' + boardStocks[0].mom.rsi + ' / KDJ ' + (boardStocks[0].mom.kdj ? boardStocks[0].mom.kdj.cross : '—') + ' / MACD ' + (boardStocks[0].mom.macd ? boardStocks[0].mom.macd.cross : '—') + '）' : '—') + '）｜ 留档 ' + bo.days +
         ' 个添加日 ｜ 明细 ' + bo.rows + ' 行 ｜ T+1 已到位 ' + bo.t1 + ' 只 ｜ ' + (bo.skipped ? '本轮未新增（' + bo.skipped + '）' : '本轮新增 ' + bo.added + ' 只'));
     } catch (e) {
       console.log('新闻看板个股：本轮生成失败（' + String((e && e.message) || e) + '），页面沿用上一版');

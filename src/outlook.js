@@ -42,7 +42,7 @@ const LISTS = {
     id: 'board',
     title: '新闻看板个股表现 · 明细表',
     lede: '取「财联社新闻股票看板 · 个股表现」里按动能排序选中的个股，逐日留档并跟踪 T+1~T+5。',
-    tipExtra: '板块里的「个股表现」按 5 日动能排序（最新交易日收盘 ÷ 5 个交易日前收盘 − 1）；本条明细表记录每天最终选中名单，纳入当日之后的表现。',
+    tipExtra: '板块里的「个股表现」按动能分排序：RSI(14)×30% + KDJ(9,3,3)×30% + MACD(12,26,9)×40%（各指标先折算成 0-100 再按权重合成）；本条明细表记录每天最终选中名单，以及纳入当日之后的表现。',
     dataFile: path.join(OUT_DIR, 'stocks.json'),
     pageDir: path.join(OUT_DIR, 'stocks'),
     merge: false,
@@ -177,14 +177,9 @@ function saveLog(log, spec) {
   fs.writeFileSync(file, JSON.stringify(log, null, 1), 'utf8');
 }
 
-/** 5 日动能：最新交易日收盘 ÷ 5 个交易日前收盘 − 1（%）。看板排序与明细页共用。 */
+/** 动能分（0-100）：RSI(14) 30% + KDJ(9,3,3) 30% + MACD(12,26,9) 40%，实现在 technical.js。 */
 function momentumOf(rec) {
-  const recent = rec && rec.metrics && rec.metrics.recent;
-  if (!recent || recent.length < 2) return null;
-  const last = Number(recent[recent.length - 1][1]);
-  const base = Number(recent[Math.max(0, recent.length - 6)][1]);
-  if (!Number.isFinite(last) || !Number.isFinite(base) || !base) return null;
-  return Math.round((last / base - 1) * 10000) / 100;
+  return technical.momentumScore(rec && rec.metrics);
 }
 
 /** 交易日历：优先用指数日线，指数取不到时退到一只大盘股。 */
@@ -321,6 +316,9 @@ async function attach(log, cfg, opts) {
       const pre = preStats(techStocks[p.code], String(p.addedAt || '').slice(0, 10));
       if (pre.d1 !== null || pre.a10 !== null) p.pre = pre;
       else if (!p.pre) p.pre = pre;
+      // 动能分（RSI/KDJ/MACD 合成）跟着缓存走，明细页用它在股名下方标一行
+      const mom = technical.momentumScore(techStocks[p.code] && techStocks[p.code].metrics);
+      if (mom) p.mom = mom;
       lines.push({
         day: d.day,
         dayText: dayLabel(d.day),
@@ -466,7 +464,8 @@ function render(result, opts) {
         '<td data-label=' + Q + '股票名称' + Q + '><a href=' + Q + 'https://quote.eastmoney.com/' + encodeURIComponent(p.code) + '.html' + Q +
           ' target=' + Q + '_blank' + Q + ' rel=' + Q + 'noopener noreferrer' + Q + ' title=' + Q + '在东方财富查看行情与K线' + Q + '>' + esc(p.name) + '</a>' +
           (p.theme ? '<span class=' + Q + 'sub' + Q + '>' + esc(report.outlookShort(p.theme)) + '</span>' : '') +
-          (p.limitUp ? '<span class=' + Q + 'sub' + Q + '><span class=' + Q + 'up-limit' + Q + '>纳入日涨停</span></span>' : '') + '</td>' +
+          (p.limitUp ? '<span class=' + Q + 'sub' + Q + '><span class=' + Q + 'up-limit' + Q + '>纳入日涨停</span></span>' : '') +
+          (report.momentumBrief(p.mom) ? '<span class=' + Q + 'sub' + Q + ' title=' + Q + esc(report.momentumText(p.mom)) + Q + '>' + esc(report.momentumBrief(p.mom)) + '</span>' : '') + '</td>' +
         PRE_WINDOWS.map(function (w) {
           return '<td class=' + Q + 'pct' + Q + ' data-label=' + Q + '前' + CN_NUM[w.len] + '日日均涨幅' + Q + '>' +
             preCell(pre[w.key], pre[w.n], w.len) + '</td>';
@@ -493,6 +492,7 @@ function render(result, opts) {
     + '当日涨幅 = 纳入当日该股的收盘涨跌幅；T+N 涨幅 = 之后第 N 个交易日的收盘涨跌幅，尚未发生的档位显示「待更新」；'
     + '五日平均涨幅 = 已发生的 T+1~T+5 的算术平均。窗口不足（如次新股）会标出「已发生 n/N」，数据取不到显示「—」。'
     + (spec.tipExtra ? esc(spec.tipExtra) + ' ' : '')
+    + '股名下方的「动能」= RSI(14)×30% + KDJ(9,3,3)×30% + MACD(12,26,9)×40%（0-100，鼠标悬停看分解；各指标先折算成 0-100：RSI 70 以上按超买回落，KDJ 按 K/D 金叉强度与 J 超买超卖，MACD 按柱状强度与零轴位置）。'
     + '名单由当日全市场行情推导，属于动量观察名单，不是预测，也不构成投资建议。</div>';
 
   return [
@@ -594,7 +594,8 @@ async function run(card, opts) {
 async function runBoard(stocks, opts) {
   opts = opts || {};
   const picks = (stocks || []).map(function (s) {
-    return { code: s.code, name: s.name, theme: s.theme || '', score: s.mom === undefined ? null : s.mom };
+    const score = s.mom && s.mom.score !== undefined && s.mom.score !== null ? s.mom.score : (typeof s.mom === 'number' ? s.mom : null);
+    return { code: s.code, name: s.name, theme: s.theme || '', score: score };
   });
   return runList(LISTS.board, picks, opts.stampMs || Date.now(), Object.assign({}, opts, { seedPct: false }));
 }

@@ -572,17 +572,9 @@ const CSS_BASE = "body{font-family:'Microsoft YaHei',system-ui,sans-serif;margin
 const SITE_BASE = 'https://yunqingzou-bit.github.io/';
 const NAV_GROUPS = [
   { label: '本看板', items: [
-    { label: '表格版', href: SITE_BASE + 'cls-news-dashboard/', title: '表格版（桌面默认）' },
-    { label: '卡片版', href: SITE_BASE + 'cls-news-dashboard/cards/', title: '卡片版（手机更好读）' },
     { label: '明日关注个股明细', href: SITE_BASE + 'cls-news-dashboard/outlook/', title: '明日看点关注个股的历史明细表' },
     { label: '新闻看板个股明细', href: SITE_BASE + 'cls-news-dashboard/stocks/', title: '财联社新闻股票看板 · 个股表现的历史明细表' },
     { label: 'Stockbee 动量爆发', href: SITE_BASE + 'cls-news-dashboard/stockbee/', title: 'A股近三个月信号与前瞻收益' },
-  ] },
-  { label: '数据文件', items: [
-    { label: 'technical.json', href: SITE_BASE + 'cls-news-dashboard/technical.json', title: '技术面缓存（给程序用）', newTab: true },
-    { label: 'research.json', href: SITE_BASE + 'cls-news-dashboard/research.json', title: '调研缓存（给程序用）', newTab: true },
-    { label: 'stockbee.json', href: SITE_BASE + 'cls-news-dashboard/stockbee.json', title: 'Stockbee 研究数据', newTab: true },
-    { label: 'news.csv', href: SITE_BASE + 'cls-news-dashboard/news.csv', title: '新闻明细表（可下载表格文件）', newTab: true },
   ] },
   { label: '其他看板', items: [
     { label: '财联社新闻精选20', href: SITE_BASE + 'cls-news-impact-dashboard/' },

@@ -9,6 +9,7 @@ const research = require('./research.js');
 const technical = require('./technical.js');
 const top20 = require('./top20.js');
 const market = require('./market.js');
+const outlook = require('./outlook.js');
 
 function arg(name, fallback) {
   const i = process.argv.indexOf('--' + name);
@@ -144,6 +145,16 @@ function siteLinks() { return process.argv.includes('--site-links'); }
       console.log('当天行情卡片：本轮抓取失败（' + String((e && e.message) || e) + '），页面沿用上一版');
     }
   }
+  // 明日关注个股明细：把 card.outlook.picks 按添加日期留档，并补齐 T+1~T+5 与两份结论
+  if (!process.argv.includes('--no-outlook')) {
+    try {
+      const oo = await outlook.run(meta.card, { config: cfg, newsRows: rows, siteLinks: siteLinks(), backHref: siteLinks() ? '../' : '' });
+      console.log('明日关注个股：留档 ' + oo.days + ' 个添加日 ｜ 明细 ' + oo.rows + ' 行 ｜ T+1 已到位 ' + oo.t1 + ' 只 ｜ T+5 已到位 ' + oo.t5 + ' 只 ｜ ' +
+        (oo.skipped ? '本轮未新增（' + oo.skipped + '）' : '本轮新增 ' + oo.added + ' 只'));
+    } catch (e) {
+      console.log('明日关注个股：本轮生成失败（' + String((e && e.message) || e) + '），页面沿用上一版');
+    }
+  }
   const out = report.exportAll(rows, meta, {
     fileBase: 'cls-news',
     layout: 'table',
@@ -151,6 +162,7 @@ function siteLinks() { return process.argv.includes('--site-links'); }
     links: siteLinks() ? [{ href: 'cards/', label: '卡片版' }] : [],
     alsoCards: true,
     cardsLinks: siteLinks() ? [{ href: '../', label: '表格版' }] : [],
+    outlookHref: siteLinks() ? 'outlook/' : '',
   });
   const selected20 = top20.write(rows, meta, {
     days: Math.min(days, 3),

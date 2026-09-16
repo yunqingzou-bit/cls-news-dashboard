@@ -1,0 +1,529 @@
+{
+ "version": 1,
+ "updatedAt": "2026-09-16T11:11:50.708Z",
+ "days": [
+  {
+   "day": "2026-09-16",
+   "firstAt": "2026-09-16 19:09",
+   "lastAt": "2026-09-16 19:10",
+   "tone": "偏强",
+   "upRatio": 77,
+   "picks": [
+    {
+     "code": "sh600206",
+     "name": "有研新材",
+     "theme": "电子-半导体-半导体材料",
+     "addedAt": "2026-09-16 19:09",
+     "entryPct": 9.99,
+     "entryTr": 8.97,
+     "entryFundYi": 9.1,
+     "score": 48.62579178,
+     "limitUp": true,
+     "close0": 51.63,
+     "d0": 9.99,
+     "t": [
+      null,
+      null,
+      null,
+      null,
+      null
+     ],
+     "entryDay": "2026-09-16"
+    },
+    {
+     "code": "sh688432",
+     "name": "有研硅  ",
+     "theme": "电子-半导体-半导体材料",
+     "addedAt": "2026-09-16 19:09",
+     "entryPct": 20,
+     "entryTr": 6.15,
+     "entryFundYi": 6.33,
+     "score": 44.49844517,
+     "limitUp": true,
+     "close0": 54.06,
+     "d0": 20,
+     "t": [
+      null,
+      null,
+      null,
+      null,
+      null
+     ],
+     "entryDay": "2026-09-16"
+    },
+    {
+     "code": "sh605358",
+     "name": "立昂微  ",
+     "theme": "第三代半导体",
+     "addedAt": "2026-09-16 19:09",
+     "entryPct": 10,
+     "entryTr": 6.44,
+     "entryFundYi": 3.95,
+     "score": 40.923962195,
+     "limitUp": true,
+     "close0": 44.87,
+     "d0": 10,
+     "t": [
+      null,
+      null,
+      null,
+      null,
+      null
+     ],
+     "entryDay": "2026-09-16"
+    },
+    {
+     "code": "sh688008",
+     "name": "澜起科技",
+     "theme": "股权转让",
+     "addedAt": "2026-09-16 19:09",
+     "entryPct": 6.42,
+     "entryTr": 3.06,
+     "entryFundYi": 8.15,
+     "score": 40.062053969999994,
+     "limitUp": false,
+     "close0": 199.89,
+     "d0": 6.42,
+     "t": [
+      null,
+      null,
+      null,
+      null,
+      null
+     ],
+     "entryDay": "2026-09-16"
+    },
+    {
+     "code": "sz300671",
+     "name": "富满微",
+     "theme": "LED",
+     "addedAt": "2026-09-16 19:09",
+     "entryPct": 14.74,
+     "entryTr": 11.44,
+     "entryFundYi": 1.8,
+     "score": 37.70413175,
+     "limitUp": true,
+     "close0": 58.06,
+     "d0": 14.74,
+     "t": [
+      null,
+      null,
+      null,
+      null,
+      null
+     ],
+     "entryDay": "2026-09-16"
+    },
+    {
+     "code": "sz002428",
+     "name": "云南锗业",
+     "theme": "LED",
+     "addedAt": "2026-09-16 19:09",
+     "entryPct": 4.79,
+     "entryTr": 9.89,
+     "entryFundYi": 6.74,
+     "score": 34.69442545,
+     "limitUp": false,
+     "close0": 94.59,
+     "d0": 4.79,
+     "t": [
+      null,
+      null,
+      null,
+      null,
+      null
+     ],
+     "entryDay": "2026-09-16"
+    },
+    {
+     "code": "sz000021",
+     "name": "深科技",
+     "theme": "LED",
+     "addedAt": "2026-09-16 19:09",
+     "entryPct": 6.75,
+     "entryTr": 6.95,
+     "entryFundYi": 3.47,
+     "score": 33.704341604999996,
+     "limitUp": false,
+     "close0": 36.2,
+     "d0": 6.75,
+     "t": [
+      null,
+      null,
+      null,
+      null,
+      null
+     ],
+     "entryDay": "2026-09-16"
+    },
+    {
+     "code": "sh600641",
+     "name": "先导基电",
+     "theme": "电子-半导体-半导体材料",
+     "addedAt": "2026-09-16 19:09",
+     "entryPct": 6.8,
+     "entryTr": 7.41,
+     "entryFundYi": 1.38,
+     "score": 30.66809422,
+     "limitUp": false,
+     "close0": 33.45,
+     "d0": 6.8,
+     "t": [
+      null,
+      null,
+      null,
+      null,
+      null
+     ],
+     "entryDay": "2026-09-16"
+    },
+    {
+     "code": "sz300489",
+     "name": "光智科技",
+     "theme": "电子-光学光电子-光学元件",
+     "addedAt": "2026-09-16 19:09",
+     "entryPct": 5.98,
+     "entryTr": 7.77,
+     "entryFundYi": 1.8,
+     "score": 29.664520535,
+     "limitUp": false,
+     "close0": 210.45,
+     "d0": 5.98,
+     "t": [
+      null,
+      null,
+      null,
+      null,
+      null
+     ],
+     "entryDay": "2026-09-16"
+    },
+    {
+     "code": "sh688012",
+     "name": "中微公司",
+     "theme": "",
+     "addedAt": "2026-09-16 19:09",
+     "entryPct": 6.65,
+     "entryTr": 2.29,
+     "entryFundYi": 10.01,
+     "score": 28.3,
+     "limitUp": false,
+     "close0": 352.6,
+     "d0": 6.65,
+     "t": [
+      null,
+      null,
+      null,
+      null,
+      null
+     ],
+     "entryDay": "2026-09-16"
+    },
+    {
+     "code": "sh688205",
+     "name": "德科立  ",
+     "theme": "股权转让",
+     "addedAt": "2026-09-16 19:09",
+     "entryPct": 5.29,
+     "entryTr": 7.82,
+     "entryFundYi": 1.61,
+     "score": 27.994324159999998,
+     "limitUp": false,
+     "close0": 219,
+     "d0": 5.29,
+     "t": [
+      null,
+      null,
+      null,
+      null,
+      null
+     ],
+     "entryDay": "2026-09-16"
+    },
+    {
+     "code": "sz300502",
+     "name": "新易盛",
+     "theme": "",
+     "addedAt": "2026-09-16 19:09",
+     "entryPct": 6.72,
+     "entryTr": 3.04,
+     "entryFundYi": 9.34,
+     "score": 27.45370683,
+     "limitUp": false,
+     "close0": 423.69,
+     "d0": 6.72,
+     "t": [
+      null,
+      null,
+      null,
+      null,
+      null
+     ],
+     "entryDay": "2026-09-16"
+    }
+   ]
+  },
+  {
+   "day": "2026-09-15",
+   "firstAt": "2026-09-15 23:35",
+   "lastAt": "2026-09-15 23:35",
+   "tone": "偏弱",
+   "upRatio": 20,
+   "picks": [
+    {
+     "code": "sz002491",
+     "name": "通鼎互联",
+     "theme": "网络安全",
+     "addedAt": "2026-09-15 23:35",
+     "entryPct": 10,
+     "entryTr": 22.7,
+     "entryFundYi": 19.66,
+     "score": 50,
+     "limitUp": true,
+     "close0": 22.23,
+     "d0": 10,
+     "t": [
+      9.99,
+      null,
+      null,
+      null,
+      null
+     ],
+     "entryDay": "2026-09-15"
+    },
+    {
+     "code": "sz002487",
+     "name": "大金重工",
+     "theme": "电力设备-风电设备-风电零部件",
+     "addedAt": "2026-09-15 23:35",
+     "entryPct": 10.01,
+     "entryTr": 12.81,
+     "entryFundYi": 6.21,
+     "score": 44.31169382,
+     "limitUp": true,
+     "close0": 39.44,
+     "d0": 10.01,
+     "t": [
+      -0.71,
+      null,
+      null,
+      null,
+      null
+     ],
+     "entryDay": "2026-09-15"
+    },
+    {
+     "code": "sz002585",
+     "name": "双星新材",
+     "theme": "基础化工-塑料-膜材料",
+     "addedAt": "2026-09-15 23:35",
+     "entryPct": 10.04,
+     "entryTr": 22.25,
+     "entryFundYi": 2.86,
+     "score": 39.285076595,
+     "limitUp": true,
+     "close0": 12.06,
+     "d0": 10.04,
+     "t": [
+      0.91,
+      null,
+      null,
+      null,
+      null
+     ],
+     "entryDay": "2026-09-15"
+    },
+    {
+     "code": "sz300806",
+     "name": "斯迪克",
+     "theme": "基础化工-塑料-膜材料",
+     "addedAt": "2026-09-15 23:35",
+     "entryPct": 9.35,
+     "entryTr": 10.38,
+     "entryFundYi": 2.64,
+     "score": 37.665124989999995,
+     "limitUp": false,
+     "close0": 57.42,
+     "d0": 9.35,
+     "t": [
+      3.88,
+      null,
+      null,
+      null,
+      null
+     ],
+     "entryDay": "2026-09-15"
+    },
+    {
+     "code": "sz300905",
+     "name": "宝丽迪",
+     "theme": "橡塑",
+     "addedAt": "2026-09-15 23:35",
+     "entryPct": 15.53,
+     "entryTr": 17.55,
+     "entryFundYi": 1.7,
+     "score": 37.550399585,
+     "limitUp": true,
+     "close0": 40.55,
+     "d0": 15.53,
+     "t": [
+      -1.6,
+      null,
+      null,
+      null,
+      null
+     ],
+     "entryDay": "2026-09-15"
+    },
+    {
+     "code": "sh688625",
+     "name": "呈和科技",
+     "theme": "橡塑",
+     "addedAt": "2026-09-15 23:35",
+     "entryPct": 8.48,
+     "entryTr": 4.28,
+     "entryFundYi": 0.66,
+     "score": 32.948333785,
+     "limitUp": false,
+     "close0": 67.26,
+     "d0": 8.48,
+     "t": [
+      4.68,
+      null,
+      null,
+      null,
+      null
+     ],
+     "entryDay": "2026-09-15"
+    },
+    {
+     "code": "sh688072",
+     "name": "拓荆科技",
+     "theme": "大基金系",
+     "addedAt": "2026-09-15 23:35",
+     "entryPct": 7.99,
+     "entryTr": 2.49,
+     "entryFundYi": 0.85,
+     "score": 32.255998925,
+     "limitUp": false,
+     "close0": 649,
+     "d0": 7.99,
+     "t": [
+      4.71,
+      null,
+      null,
+      null,
+      null
+     ],
+     "entryDay": "2026-09-15"
+    },
+    {
+     "code": "sz000859",
+     "name": "国风新材",
+     "theme": "光刻胶",
+     "addedAt": "2026-09-15 23:35",
+     "entryPct": 6.39,
+     "entryTr": 13.38,
+     "entryFundYi": 2.14,
+     "score": 30.99700953,
+     "limitUp": false,
+     "close0": 9.65,
+     "d0": 6.39,
+     "t": [
+      2.18,
+      null,
+      null,
+      null,
+      null
+     ],
+     "entryDay": "2026-09-15"
+    },
+    {
+     "code": "sz002886",
+     "name": "沃特股份",
+     "theme": "橡塑",
+     "addedAt": "2026-09-15 23:35",
+     "entryPct": 5.96,
+     "entryTr": 26.02,
+     "entryFundYi": 2.08,
+     "score": 30.037083265,
+     "limitUp": false,
+     "close0": 26.85,
+     "d0": 5.96,
+     "t": [
+      0.15,
+      null,
+      null,
+      null,
+      null
+     ],
+     "entryDay": "2026-09-15"
+    },
+    {
+     "code": "sz300604",
+     "name": "长川科技",
+     "theme": "大基金系",
+     "addedAt": "2026-09-15 23:35",
+     "entryPct": 5.39,
+     "entryTr": 3.45,
+     "entryFundYi": 2.31,
+     "score": 29.24428768,
+     "limitUp": false,
+     "close0": 267.25,
+     "d0": 5.39,
+     "t": [
+      0.85,
+      null,
+      null,
+      null,
+      null
+     ],
+     "entryDay": "2026-09-15"
+    },
+    {
+     "code": "sz002212",
+     "name": "天融信",
+     "theme": "网络安全",
+     "addedAt": "2026-09-15 23:35",
+     "entryPct": 5,
+     "entryTr": 29.59,
+     "entryFundYi": 1.03,
+     "score": 26.54101795,
+     "limitUp": false,
+     "close0": 7.77,
+     "d0": 5,
+     "t": [
+      -10.04,
+      null,
+      null,
+      null,
+      null
+     ],
+     "entryDay": "2026-09-15"
+    },
+    {
+     "code": "sz002185",
+     "name": "华天科技",
+     "theme": "大基金系",
+     "addedAt": "2026-09-15 23:35",
+     "entryPct": 2.25,
+     "entryTr": 6.56,
+     "entryFundYi": 3.29,
+     "score": 24.4308459,
+     "limitUp": false,
+     "close0": 16.36,
+     "d0": 2.25,
+     "t": [
+      3,
+      null,
+      null,
+      null,
+      null
+     ],
+     "entryDay": "2026-09-15"
+    }
+   ],
+   "backfilled": true
+  }
+ ]
+}

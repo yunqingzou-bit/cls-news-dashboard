@@ -221,7 +221,8 @@ function outlookShort(name) {
  * 明日看点：由今日全市场动量推导的观察名单（板块 + 个股），不是预测。
  * 数据来自 src/market.js 的 card.outlook。
  */
-function outlookHtml(card) {
+function outlookHtml(card, opts) {
+  opts = opts || {};
   const o = card && card.outlook;
   if (!o || !o.sectors || !o.sectors.length) return '';
   const b = card.breadth || {};
@@ -250,7 +251,12 @@ function outlookHtml(card) {
     '<div class="mkt-note" style=' + Q + 'margin:0 0 .7em' + Q + '>' + note + '</div>',
     '<div class="mkt-hot">',
     '<div class="mkt-hot-col"><div class="mkt-hot-h">关注板块（动能排序，成分 ≥ ' + mkInt(o.minN) + ' 只）</div>' + sectorRows + '</div>',
-    '<div class="mkt-hot-col"><div class="mkt-hot-h">关注个股（' + mkInt(picks.length) + ' 只，其中涨停 ' + mkInt(limitCnt) + ' 只）</div>' + pickRows + '</div>',
+    '<div class="mkt-hot-col"><div class="mkt-hot-h">关注个股（' + mkInt(picks.length) + ' 只，其中涨停 ' + mkInt(limitCnt) + ' 只）' +
+      (opts.outlookHref
+        ? ' <a href=' + Q + esc(opts.outlookHref) + Q + ' title=' + Q + '按添加日期查看每只个股的当日与 T+1~T+5 表现' + Q +
+          ' style=' + Q + 'margin-left:auto;color:#1257a8;font-weight:600;white-space:nowrap' + Q + '>历史明细表 →</a>'
+        : '') +
+      '</div>' + pickRows + '</div>',
     '</div>',
     '<div class="mkt-note">口径：由今日全市场行情推导的动量观察名单，非预测。板块动能 = 均涨 + 上涨占比 + 强势股占比 + 主力净流入；个股分 = 涨幅 + 主力净流入 + 热门板块加成。涨停股收盘价买不到，名单最多 4 只涨停、每板块最多 3 只。样本为新闻与资金榜涉及的个股，不等于全市场板块广度。</div>',
     '</div>',
@@ -316,7 +322,8 @@ function numAttr(v) {
   return v === null || v === undefined || !Number.isFinite(n) ? '' : String(n);
 }
 
-function marketCardHtml(card) {
+function marketCardHtml(card, opts) {
+  opts = opts || {};
   if (!card || !card.breadth) return '';
   const b = card.breadth;
 
@@ -379,7 +386,7 @@ function marketCardHtml(card) {
       '<div class="mkt-hot-col"><div class="mkt-hot-h">涨幅榜</div>' + (card.hotGain || []).map(hotRow).join('') + '</div>' +
       '<div class="mkt-hot-col"><div class="mkt-hot-h">主力净流入榜</div>' + (card.hotFund || []).map(hotRow).join('') + '</div>' +
       '</div></div>',
-    outlookHtml(card),
+    outlookHtml(card, opts),
     '</div>',
     '</section>',
   ].join('\n');
@@ -711,7 +718,7 @@ function toHtml(rows, meta, opts) {
     '<h1>' + esc(meta.title || '财联社自选股 · 目标栏目新闻') + '</h1>',
     '<div class=' + Q + 'meta' + Q + '>区间 ' + esc(meta.range) + ' ｜ 共 ' + rows.length + ' 条 ｜ 股票池 ' + esc(meta.poolLabel) + ' ｜ 生成于 ' + esc(meta.generatedAt) + links + '</div>',
     hintHtml,
-    marketCardHtml(meta.card),
+    marketCardHtml(meta.card, opts),
     newsBoardHtml(rows),
     toolbar,
     '<div class=' + Q + 'tw' + Q + '><table>' + colgroup + '<thead><tr>' + th + '</tr></thead><tbody>',
@@ -771,7 +778,9 @@ function exportAll(rows, meta, opts) {
 function writeCardsVariant(rows, meta, opts, base) {
   if (!opts.alsoCards) return null;
   const p = path.join(OUT_DIR, base + '-cards.html');
-  fs.writeFileSync(p, toHtml(rows, meta, { layout: 'cards', links: opts.cardsLinks || [] }), 'utf8');
+  // 卡片版挂在 /cards/ 下，链接要退回上一级才能指到 /outlook/
+  const outlookHref = opts.outlookHref ? '../' + opts.outlookHref : '';
+  fs.writeFileSync(p, toHtml(rows, meta, { layout: 'cards', links: opts.cardsLinks || [], outlookHref: outlookHref }), 'utf8');
   return p;
 }
 
@@ -791,4 +800,5 @@ function pruneExports(base, keepSets) {
   }
 }
 
-module.exports = { exportAll: exportAll, toCsv: toCsv, toHtml: toHtml, HEADERS: HEADERS, TEXT_SOURCE_LABEL: TEXT_SOURCE_LABEL, OUT_DIR: OUT_DIR };
+module.exports = { exportAll: exportAll, toCsv: toCsv, toHtml: toHtml, HEADERS: HEADERS, TEXT_SOURCE_LABEL: TEXT_SOURCE_LABEL, OUT_DIR: OUT_DIR,
+  researchHtml: researchHtml, technicalHtml: technicalHtml, outlookShort: outlookShort };

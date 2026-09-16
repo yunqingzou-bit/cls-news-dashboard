@@ -33,9 +33,12 @@ const DEFAULT_RECENT_DAYS = 8;   // 默认给最近多少个交易日刷新日�
 const OPEN_MINUTE = 9 * 60 + 30;
 const INDEX_CODES = ['sh000001', 'sz399001', 'sh600000'];
 const WEEKDAY = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
-const HEADERS = ['添加时间', '股票名称', '当日涨幅', 'T+1涨幅', 'T+2涨幅', 'T+3涨幅', 'T+4涨幅', 'T+5涨幅', '五日平均涨幅', '调研结论', '技术面结论'];
-// 手机端整页按 1080px 渲染，列宽要保证「+20.00%」「-10.04%」这类最长的涨跌幅也能整行放下
-const COL_WIDTHS = [11, 9, 6, 6, 6, 6, 6, 6, 9, 17.5, 17.5];
+const CN_NUM = { 3: '三', 5: '五', 10: '十' };
+const HEADERS = ['添加时间', '股票名称', '前十日日均涨幅', '前五日日均涨幅', '前三日日均涨幅', '前一日涨幅',
+  '当日涨幅', 'T+1涨幅', 'T+2涨幅', 'T+3涨幅', 'T+4涨幅', 'T+5涨幅', '五日平均涨幅', '调研结论', '技术面结论'];
+// 手机端整页按 1080px 渲染：前 4 列之后有 11 个纯数值列，列宽要保证「+20.00%」「-10.04%」这类最长的涨跌幅整行放下
+const COL_WIDTHS = [8, 6.5, 5.5, 5.5, 5.5, 5.5, 5.5, 5.5, 5.5, 5.5, 5.5, 5.5, 5.5, 12.5, 12.5];
+const PRE_WINDOWS = [{ key: 'a10', n: 'n10', len: 10 }, { key: 'a5', n: 'n5', len: 5 }, { key: 'a3', n: 'n3', len: 3 }];
 
 function readJson(file) {
   try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch (_) { return null; }
@@ -88,6 +91,40 @@ function mean(list) {
     n++;
   }
   return n ? { value: Math.round(sum / n * 100) / 100, n: n } : { value: null, n: 0 };
+}
+
+/**
+ * 纳入当日前 N 个交易日的日均涨幅（不含纳入当日）：
+ * 用 technical.js 缓存里 recent（最近 30 个交易日的 [日期, 收盘, 当日涨幅]）取纳入日之前的窗口。
+ * 纳入日晚于最后一根日线时（盘中抓取、当日 K 线还没生成）退化成「用全部可用日线」，结果一致。
+ */
+function preStats(rec, dayKey) {
+  const out = { d1: null, a3: null, a5: null, a10: null, n3: 0, n5: 0, n10: 0 };
+  const recent = rec && rec.metrics && rec.metrics.recent;
+  if (!recent || !recent.length || !dayKey) return out;
+  let i = -1;
+  for (let k = 0; k < recent.length; k++) {
+    if (String(recent[k][0]) >= dayKey) { i = k; break; }
+  }
+  if (i < 0) i = recent.length;
+  const vals = [];
+  for (let k = Math.max(0, i - 10); k < i; k++) {
+    const v = Number(recent[k][2]);
+    if (Number.isFinite(v)) vals.push(v);
+  }
+  if (!vals.length) return out;
+  out.d1 = Math.round(vals[vals.length - 1] * 100) / 100;
+  const avg = function (len) {
+    const seg = vals.slice(Math.max(0, vals.length - len));
+    return { v: Math.round(seg.reduce(function (a, b) { return a + b; }, 0) / seg.length * 100) / 100, n: seg.length };
+  };
+  const a3 = avg(3);
+  const a5 = avg(5);
+  const a10 = avg(10);
+  out.a3 = a3.v; out.n3 = a3.n;
+  out.a5 = a5.v; out.n5 = a5.n;
+  out.a10 = a10.v; out.n10 = a10.n;
+  return out;
 }
 
 function emptyLog() {
@@ -236,6 +273,10 @@ async function attach(log, cfg, opts) {
       const has = t.filter(function (v) { return v !== null && v !== undefined; }).length;
       if (has >= 1) t1++;
       if (has >= 5) t5++;
+      // 前置动能：纳入当日前 N 个交易日的日均涨幅
+      const pre = preStats(techStocks[p.code], String(p.addedAt || '').slice(0, 10));
+      if (pre.d1 !== null || pre.a10 !== null) p.pre = pre;
+      else if (!p.pre) p.pre = pre;
       lines.push({
         day: d.day,
         dayText: dayLabel(d.day),
@@ -263,10 +304,11 @@ const CSS = [
   '.bar input{flex:1 1 240px}.bar select{flex:0 1 190px}.bar .cnt{color:#888;font-size:12px;margin-left:auto;white-space:nowrap}',
   '.tw{overflow-x:auto;-webkit-overflow-scrolling:touch;background:#fff;border-radius:8px}',
   'table{border-collapse:collapse;width:100%;background:#fff;font-size:13px;table-layout:fixed}',
-  'th,td{border:1px solid #e5e5e5;padding:8px 10px;vertical-align:top;text-align:left;overflow-wrap:anywhere;word-break:break-word}',
+  'th,td{border:1px solid #e5e5e5;padding:6px 6px;vertical-align:top;text-align:left;overflow-wrap:anywhere;word-break:break-word}',
   'th{background:#f2f3f5;position:sticky;top:0;z-index:2;font-weight:600}',
   // 日期列允许换行：整页在手机上按 1080px 渲染，一行放不下「日期 + 时间」时折成两行，不会顶出格子
   'td.t{white-space:normal;color:#555;font-variant-numeric:tabular-nums}',
+  'td.t .d{display:block;white-space:nowrap}',
   'td.pct{font-variant-numeric:tabular-nums;font-size:12.5px;font-weight:600;white-space:nowrap}',
   'td.research,td.tech{font-size:12.5px;line-height:1.7;color:#3b4149}',
   '.f-up{color:#d93025;font-weight:600}.f-down{color:#0f9d58;font-weight:600}',
@@ -282,7 +324,7 @@ const CSS = [
   '@media (max-width:760px){html,body{max-width:100%}body{margin:10px}h1{font-size:16px}.lede,.meta{font-size:12px}'
     + '.bar{padding:8px}.bar input,.bar select{flex:1 1 100%;width:100%}.bar .cnt{margin-left:0}'
     + '.tw{overflow-x:auto;border:1px solid #e5e5e5;border-radius:8px}table{width:1080px;min-width:1080px}'
-    + 'th,td{font-size:12.5px;padding:6px 8px}th{position:static}.research-item{margin-bottom:6px}}',
+    + 'th,td{font-size:12px;padding:5px 5px}th{position:static}.research-item{margin-bottom:6px}}',
 ].join('');
 
 const SCRIPT = '<script>' + "(function(){\n"
@@ -329,6 +371,13 @@ function cellPct(v, extraClass) {
       : '<span class=' + Q + cls + Q + '>' + pct(n) + '</span>';
 }
 
+/** 前置动能单元格：数值 + 「已发生 n/N」（上市不足 N 个交易日时提示窗口不完整）。 */
+function preCell(value, count, want) {
+  if (value === null || value === undefined || !Number.isFinite(Number(value))) return '<span class=' + Q + 'muted' + Q + '>—</span>';
+  const base = cellPct(value);
+  return count && want && count < want ? base + '<span class=' + Q + 'sub' + Q + '>已发生 ' + count + '/' + want + '</span>' : base;
+}
+
 /** 渲染明细页；没有数据时也给一张空状态页，保证链接不会 404。 */
 function render(result, opts) {
   opts = opts || {};
@@ -360,18 +409,24 @@ function render(result, opts) {
       if (ln.day !== d.day) continue;
       const p = ln.pick;
       const t = p.t || [];
+      const pre = p.pre || {};
       // 日期与时间拆开：窄列里整行放不下时按空格折行，避免顶出格子
       const parts = String(p.addedAt || '').split(' ');
       const avgText = ln.avg.value === null ? '<span class=' + Q + 'muted' + Q + '>待更新</span>'
         : '<span class=' + Q + (ln.avg.value > 0 ? 'f-up' : ln.avg.value < 0 ? 'f-down' : '') + Q + '>' + pct(ln.avg.value) + '</span>' +
           (ln.avg.n < 5 ? '<span class=' + Q + 'sub' + Q + '>已发生 ' + ln.avg.n + '/5</span>' : '');
       body.push('<tr data-day=' + Q + esc(d.day) + Q + '>' +
-        '<td class=' + Q + 't' + Q + ' data-label=' + Q + '添加时间' + Q + '>' + esc(parts[0]) +
-          (parts[1] ? '<span class=' + Q + 'sub' + Q + '>' + esc(parts[1]) + '</span>' : '') + '</td>' +
+        '<td class=' + Q + 't' + Q + ' data-label=' + Q + '添加时间' + Q + '><span class=' + Q + 'd' + Q + '>' + esc(parts[0]) + '</span>' +
+          (parts[1] ? ' <span class=' + Q + 'sub' + Q + '>' + esc(parts[1]) + '</span>' : '') + '</td>' +
         '<td data-label=' + Q + '股票名称' + Q + '><a href=' + Q + 'https://quote.eastmoney.com/' + encodeURIComponent(p.code) + '.html' + Q +
           ' target=' + Q + '_blank' + Q + ' rel=' + Q + 'noopener noreferrer' + Q + ' title=' + Q + '在东方财富查看行情与K线' + Q + '>' + esc(p.name) + '</a>' +
           (p.theme ? '<span class=' + Q + 'sub' + Q + '>' + esc(report.outlookShort(p.theme)) + '</span>' : '') +
           (p.limitUp ? '<span class=' + Q + 'sub' + Q + '><span class=' + Q + 'up-limit' + Q + '>纳入日涨停</span></span>' : '') + '</td>' +
+        PRE_WINDOWS.map(function (w) {
+          return '<td class=' + Q + 'pct' + Q + ' data-label=' + Q + '前' + CN_NUM[w.len] + '日日均涨幅' + Q + '>' +
+            preCell(pre[w.key], pre[w.n], w.len) + '</td>';
+        }).join('') +
+        '<td class=' + Q + 'pct' + Q + ' data-label=' + Q + '前一日涨幅' + Q + '>' + cellPct(pre.d1) + '</td>' +
         '<td class=' + Q + 'pct' + Q + ' data-label=' + Q + '当日涨幅' + Q + '>' + cellPct(p.d0) + '</td>' +
         [0, 1, 2, 3, 4].map(function (i) {
           return '<td class=' + Q + 'pct' + Q + ' data-label=' + Q + 'T+' + (i + 1) + '涨幅' + Q + '>' + cellPct(t[i]) + '</td>';
@@ -388,8 +443,10 @@ function render(result, opts) {
   const back = opts.backHref ? '<a href=' + Q + esc(opts.backHref) + Q + '>← 返回新闻表格</a>' : '';
   const stamp = shanghai(Date.now()).text;
   const tip = '<div class=' + Q + 'tip' + Q + '><b>口径</b>：添加时间 = 该股进入「明日看点 · 关注个股」名单的时刻（同一添加日期内只记首次纳入）；'
+    + '前十日 / 前五日 / 前三日日均涨幅 = 纳入当日前 10 / 5 / 3 个交易日的收盘涨跌幅算术平均（不含纳入当日，用于看纳入前的动能）；'
+    + '前一日涨幅 = 纳入当日前一个交易日的收盘涨跌幅；'
     + '当日涨幅 = 纳入当日该股的收盘涨跌幅；T+N 涨幅 = 之后第 N 个交易日的收盘涨跌幅，尚未发生的档位显示「待更新」；'
-    + '五日平均涨幅 = 已发生的 T+1~T+5 的算术平均（不足 5 个交易日会标出已发生档位数）。'
+    + '五日平均涨幅 = 已发生的 T+1~T+5 的算术平均。窗口不足（如次新股）会标出「已发生 n/N」，数据取不到显示「—」。'
     + '名单由当日全市场行情推导，属于动量观察名单，不是预测，也不构成投资建议。</div>';
 
   return [

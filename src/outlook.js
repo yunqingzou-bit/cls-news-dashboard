@@ -34,7 +34,8 @@ const OPEN_MINUTE = 9 * 60 + 30;
 const INDEX_CODES = ['sh000001', 'sz399001', 'sh600000'];
 const WEEKDAY = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
 const HEADERS = ['添加时间', '股票名称', '当日涨幅', 'T+1涨幅', 'T+2涨幅', 'T+3涨幅', 'T+4涨幅', 'T+5涨幅', '五日平均涨幅', '调研结论', '技术面结论'];
-const COL_WIDTHS = [10, 9, 6, 5, 5, 5, 5, 5, 8, 21, 21];
+// 手机端整页按 1080px 渲染，列宽要保证「+20.00%」「-10.04%」这类最长的涨跌幅也能整行放下
+const COL_WIDTHS = [11, 9, 6, 6, 6, 6, 6, 6, 9, 17.5, 17.5];
 
 function readJson(file) {
   try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch (_) { return null; }
@@ -264,7 +265,8 @@ const CSS = [
   'table{border-collapse:collapse;width:100%;background:#fff;font-size:13px;table-layout:fixed}',
   'th,td{border:1px solid #e5e5e5;padding:8px 10px;vertical-align:top;text-align:left;overflow-wrap:anywhere;word-break:break-word}',
   'th{background:#f2f3f5;position:sticky;top:0;z-index:2;font-weight:600}',
-  'td.t{white-space:nowrap;color:#555;font-variant-numeric:tabular-nums}',
+  // 日期列允许换行：整页在手机上按 1080px 渲染，一行放不下「日期 + 时间」时折成两行，不会顶出格子
+  'td.t{white-space:normal;color:#555;font-variant-numeric:tabular-nums}',
   'td.pct{font-variant-numeric:tabular-nums;font-size:12.5px;font-weight:600;white-space:nowrap}',
   'td.research,td.tech{font-size:12.5px;line-height:1.7;color:#3b4149}',
   '.f-up{color:#d93025;font-weight:600}.f-down{color:#0f9d58;font-weight:600}',
@@ -272,7 +274,7 @@ const CSS = [
   '.v-green{color:#0f9d58}.v-blue{color:#1a73e8}.v-red{color:#d93025}',
   '.research-item{display:block;margin:0 0 5px}.research-item:last-child{margin-bottom:0}',
   '.research-key{font-weight:700;color:#20252b}.research-impact{color:#c62828;font-weight:700}',
-  '.sub{display:block;color:#888;font-size:11.5px;margin-top:2px}',
+  '.sub{display:block;color:#888;font-size:11.5px;margin-top:2px;white-space:normal;line-height:1.45}',
   '.muted{color:#aaa;font-weight:400}',
   'tr.grp td{background:#fff7ed;color:#9a3412;font-weight:700;font-size:12.5px;border-color:#f5d7bd}',
   'tr.grp .gsub{color:#a16207;font-weight:400}',
@@ -358,11 +360,14 @@ function render(result, opts) {
       if (ln.day !== d.day) continue;
       const p = ln.pick;
       const t = p.t || [];
+      // 日期与时间拆开：窄列里整行放不下时按空格折行，避免顶出格子
+      const parts = String(p.addedAt || '').split(' ');
       const avgText = ln.avg.value === null ? '<span class=' + Q + 'muted' + Q + '>待更新</span>'
         : '<span class=' + Q + (ln.avg.value > 0 ? 'f-up' : ln.avg.value < 0 ? 'f-down' : '') + Q + '>' + pct(ln.avg.value) + '</span>' +
-          (ln.avg.n < 5 ? '<span class=' + Q + 'sub' + Q + '>已发生 ' + ln.avg.n + '/5 个交易日</span>' : '');
+          (ln.avg.n < 5 ? '<span class=' + Q + 'sub' + Q + '>已发生 ' + ln.avg.n + '/5</span>' : '');
       body.push('<tr data-day=' + Q + esc(d.day) + Q + '>' +
-        '<td class=' + Q + 't' + Q + ' data-label=' + Q + '添加时间' + Q + '>' + esc(p.addedAt) + '</td>' +
+        '<td class=' + Q + 't' + Q + ' data-label=' + Q + '添加时间' + Q + '>' + esc(parts[0]) +
+          (parts[1] ? '<span class=' + Q + 'sub' + Q + '>' + esc(parts[1]) + '</span>' : '') + '</td>' +
         '<td data-label=' + Q + '股票名称' + Q + '><a href=' + Q + 'https://quote.eastmoney.com/' + encodeURIComponent(p.code) + '.html' + Q +
           ' target=' + Q + '_blank' + Q + ' rel=' + Q + 'noopener noreferrer' + Q + ' title=' + Q + '在东方财富查看行情与K线' + Q + '>' + esc(p.name) + '</a>' +
           (p.theme ? '<span class=' + Q + 'sub' + Q + '>' + esc(report.outlookShort(p.theme)) + '</span>' : '') +

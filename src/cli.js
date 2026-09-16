@@ -155,6 +155,33 @@ function siteLinks() { return process.argv.includes('--site-links'); }
       console.log('明日关注个股：本轮生成失败（' + String((e && e.message) || e) + '），页面沿用上一版');
     }
   }
+  // 新闻看板「个股表现」：按 5 日动能排序（看板模块与明细页用同一份顺序）
+  let boardStocks = [];
+  if (!process.argv.includes('--no-outlook')) {
+    try {
+      const techCache = technical.loadCache().stocks || {};
+      const resCache = research.loadCache().stocks || {};
+      const pool = report.boardStocks(rows).map(function (s) {
+        s.mom = outlook.momentumOf(techCache[s.code]);
+        const rec = resCache[s.code];
+        if (rec && rec.industry) s.theme = rec.industry;
+        return s;
+      });
+      boardStocks = pool
+        .filter(function (s) { return s.mom !== null && s.mom !== undefined; })
+        .sort(function (a, b) {
+          const av = a.nn ? a.sum / a.nn : -999;
+          const bv = b.nn ? b.sum / b.nn : -999;
+          return (b.mom - a.mom) || (bv - av) || (b.n - a.n);
+        })
+        .slice(0, Math.max(1, Number((cfg.outlook && cfg.outlook.boardStocks) || 8)));
+      const bo = await outlook.runBoard(boardStocks, { config: cfg, newsRows: rows, siteLinks: siteLinks(), backHref: siteLinks() ? '../' : '' });
+      console.log('新闻看板个股：动能排序 ' + boardStocks.length + ' 只（首位 ' + (boardStocks[0] ? boardStocks[0].name + ' ' + boardStocks[0].mom + '%' : '—') + '）｜ 留档 ' + bo.days +
+        ' 个添加日 ｜ 明细 ' + bo.rows + ' 行 ｜ T+1 已到位 ' + bo.t1 + ' 只 ｜ ' + (bo.skipped ? '本轮未新增（' + bo.skipped + '）' : '本轮新增 ' + bo.added + ' 只'));
+    } catch (e) {
+      console.log('新闻看板个股：本轮生成失败（' + String((e && e.message) || e) + '），页面沿用上一版');
+    }
+  }
   const out = report.exportAll(rows, meta, {
     fileBase: 'cls-news',
     layout: 'table',
@@ -163,6 +190,8 @@ function siteLinks() { return process.argv.includes('--site-links'); }
     alsoCards: true,
     cardsLinks: siteLinks() ? [{ href: '../', label: '表格版' }] : [],
     outlookHref: siteLinks() ? 'outlook/' : '',
+    boardHref: siteLinks() ? 'stocks/' : '',
+    boardStocks: boardStocks,
   });
   const selected20 = top20.write(rows, meta, {
     days: Math.min(days, 3),

@@ -22,9 +22,34 @@ const quotes = require('./quotes.js');
 
 const Q = String.fromCharCode(34);
 const OUT_DIR = report.OUT_DIR;
-const PAGE_DIR = path.join(OUT_DIR, 'outlook');
-const PAGE_FILE = path.join(PAGE_DIR, 'index.html');
-const DATA_FILE = path.join(OUT_DIR, 'outlook.json');
+
+/**
+ * 两个明细页共用同一套「留档 → 补行情 → 出表格」流程，差别只有标题、落盘路径和名单来源：
+ *   outlook：明日看点 · 关注个股；同一天内累加（名单当天基本稳定）
+ *   board  ：财联社新闻股票看板 · 个股表现；按 5 日动能排序，当日名单以最后一次抓取为准
+ */
+const LISTS = {
+  outlook: {
+    id: 'outlook',
+    title: '明日关注个股 · 明细表',
+    lede: '按添加日期留档，跟踪每只个股的当日与 T+1~T+5 表现。',
+    tipExtra: '',
+    dataFile: path.join(OUT_DIR, 'outlook.json'),
+    pageDir: path.join(OUT_DIR, 'outlook'),
+    merge: true,
+  },
+  board: {
+    id: 'board',
+    title: '新闻看板个股表现 · 明细表',
+    lede: '取「财联社新闻股票看板 · 个股表现」里按动能排序选中的个股，逐日留档并跟踪 T+1~T+5。',
+    tipExtra: '板块里的「个股表现」按 5 日动能排序（最新交易日收盘 ÷ 5 个交易日前收盘 − 1）；本条明细表记录每天最终选中名单，纳入当日之后的表现。',
+    dataFile: path.join(OUT_DIR, 'stocks.json'),
+    pageDir: path.join(OUT_DIR, 'stocks'),
+    merge: false,
+  },
+};
+const DATA_FILE = LISTS.outlook.dataFile;
+const PAGE_FILE = path.join(LISTS.outlook.pageDir, 'index.html');
 
 const LOG_VERSION = 1;
 const MAX_DAYS = 120;            // 日志最多保留多少个添加日期
@@ -131,8 +156,8 @@ function emptyLog() {
   return { version: LOG_VERSION, updatedAt: new Date().toISOString(), days: [] };
 }
 
-function loadLog() {
-  const log = readJson(DATA_FILE);
+function loadLog(spec) {
+  const log = readJson((spec || LISTS.outlook).dataFile);
   if (!log || !Array.isArray(log.days)) return emptyLog();
   log.days = log.days.filter(function (d) { return d && d.day; });
   for (const d of log.days) {
@@ -142,13 +167,24 @@ function loadLog() {
   return log;
 }
 
-function saveLog(log) {
+function saveLog(log, spec) {
+  const file = (spec || LISTS.outlook).dataFile;
   log.version = LOG_VERSION;
   log.updatedAt = new Date().toISOString();
   log.days.sort(function (a, b) { return a.day < b.day ? 1 : a.day > b.day ? -1 : 0; });
   if (log.days.length > MAX_DAYS) log.days = log.days.slice(0, MAX_DAYS);
-  fs.mkdirSync(path.dirname(DATA_FILE), { recursive: true });
-  fs.writeFileSync(DATA_FILE, JSON.stringify(log, null, 1), 'utf8');
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, JSON.stringify(log, null, 1), 'utf8');
+}
+
+/** 5 日动能：最新交易日收盘 ÷ 5 个交易日前收盘 − 1（%）。看板排序与明细页共用。 */
+function momentumOf(rec) {
+  const recent = rec && rec.metrics && rec.metrics.recent;
+  if (!recent || recent.length < 2) return null;
+  const last = Number(recent[recent.length - 1][1]);
+  const base = Number(recent[Math.max(0, recent.length - 6)][1]);
+  if (!Number.isFinite(last) || !Number.isFinite(base) || !base) return null;
+  return Math.round((last / base - 1) * 10000) / 100;
 }
 
 /** 交易日历：优先用指数日线，指数取不到时退到一只大盘股。 */
@@ -173,23 +209,30 @@ function resolveEntryDay(calDays, cardDay) {
   return best;
 }
 
-/** 把当天的关注名单并入日志；同一个添加日期只记首次纳入的个股。 */
-function recordDay(log, card, stamp, entryDay, backfilled) {
-  const o = (card && card.outlook) || {};
-  const picks = (o.picks || []).filter(function (p) { return p && p.code; });
-  if (!picks.length) return 0;
+/**
+ * 把当天的名单并入日志。
+ * opts.merge !== false：同一个添加日期只追加新出现的个股（明日看点：当天名单基本稳定）
+ * opts.merge === false：当天的名单以本次抓取为准，整体替换（看板：名单按动能滚动）
+ */
+function recordDay(log, picks, stamp, entryDay, opts) {
+  opts = opts || {};
+  const list = (picks || []).filter(function (p) { return p && p.code; });
+  if (!list.length) return 0;
   let entry = null;
   for (const d of log.days) if (d.day === entryDay) entry = d;
+  const reset = !!entry && opts.merge === false;
   if (!entry) {
-    entry = { day: entryDay, firstAt: stamp.text, lastAt: stamp.text, tone: o.tone || '', upRatio: o.upRatio, picks: [] };
+    entry = { day: entryDay, firstAt: stamp.text, lastAt: stamp.text, picks: [] };
     log.days.push(entry);
+  } else if (reset) {
+    entry.picks = [];
   }
   entry.lastAt = stamp.text;
-  entry.tone = o.tone || entry.tone;
-  if (o.upRatio !== undefined && o.upRatio !== null) entry.upRatio = o.upRatio;
-  if (backfilled) entry.backfilled = true;
+  if (opts.tone) entry.tone = opts.tone;
+  if (opts.upRatio !== undefined && opts.upRatio !== null) entry.upRatio = opts.upRatio;
+  if (opts.backfill) entry.backfilled = true;
   let added = 0;
-  for (const p of picks) {
+  for (const p of list) {
     let known = false;
     for (const x of entry.picks) if (x.code === p.code) known = true;
     if (known) continue;
@@ -197,14 +240,15 @@ function recordDay(log, card, stamp, entryDay, backfilled) {
       code: p.code,
       name: p.name || '',
       theme: p.theme || '',
-      addedAt: stamp.text,
+      addedAt: reset ? stamp.text : (p.addedAt || stamp.text),
       entryPct: p.pct === undefined ? null : p.pct,
       entryTr: p.tr === undefined ? null : p.tr,
       entryFundYi: p.fundYi === undefined ? null : p.fundYi,
       score: p.score === undefined ? null : p.score,
       limitUp: !!p.limitUp,
       close0: null,
-      d0: p.pct === undefined ? null : p.pct,
+      // 看板名单的 score 是动能、不是当日涨幅，所以只有明日看点用 pct 预填当日涨幅
+      d0: opts.seedPct === false ? null : (p.pct === undefined ? null : p.pct),
       t: [null, null, null, null, null],
     });
     added++;
@@ -381,6 +425,7 @@ function preCell(value, count, want) {
 /** 渲染明细页；没有数据时也给一张空状态页，保证链接不会 404。 */
 function render(result, opts) {
   opts = opts || {};
+  const spec = opts.spec || LISTS.outlook;
   const lines = result.lines || [];
   const days = [];
   const seen = {};
@@ -447,6 +492,7 @@ function render(result, opts) {
     + '前一日涨幅 = 纳入当日前一个交易日的收盘涨跌幅；'
     + '当日涨幅 = 纳入当日该股的收盘涨跌幅；T+N 涨幅 = 之后第 N 个交易日的收盘涨跌幅，尚未发生的档位显示「待更新」；'
     + '五日平均涨幅 = 已发生的 T+1~T+5 的算术平均。窗口不足（如次新股）会标出「已发生 n/N」，数据取不到显示「—」。'
+    + (spec.tipExtra ? esc(spec.tipExtra) + ' ' : '')
     + '名单由当日全市场行情推导，属于动量观察名单，不是预测，也不构成投资建议。</div>';
 
   return [
@@ -455,11 +501,11 @@ function render(result, opts) {
     '<head>',
     '<meta charset=' + Q + 'utf-8' + Q + '>',
     '<meta name=' + Q + 'viewport' + Q + ' content=' + Q + 'width=1080' + Q + '>',
-    '<title>明日关注个股明细</title>',
+    '<title>' + esc(spec.title) + '</title>',
     '<style>' + CSS + '</style>',
     '</head><body>',
-    '<h1>明日关注个股 · 明细表</h1>',
-    '<p class=' + Q + 'lede' + Q + '>按添加日期留档，跟踪每只个股的当日与 T+1~T+5 表现。</p>',
+    '<h1>' + esc(spec.title) + '</h1>',
+    '<p class=' + Q + 'lede' + Q + '>' + esc(spec.lede) + '</p>',
     '<div class=' + Q + 'meta' + Q + '>共 ' + lines.length + ' 只明细 ｜ ' + days.length + ' 个添加日期 ｜ T+1 已到位 ' + (result.t1 || 0) + ' 只 ｜ T+5 已到位 ' + (result.t5 || 0) + ' 只 ｜ 生成 ' + esc(stamp) + ' ' + back + '</div>',
     tip,
     (result.notes && result.notes.length ? '<div class=' + Q + 'tip' + Q + '>' + esc(result.notes.join('；')) + '</div>' : ''),
@@ -472,16 +518,18 @@ function render(result, opts) {
   ].join('\n');
 }
 
-function writePage(html) {
-  fs.mkdirSync(PAGE_DIR, { recursive: true });
-  fs.writeFileSync(PAGE_FILE, html, 'utf8');
-  return PAGE_FILE;
+function writePage(html, spec) {
+  const dir = (spec || LISTS.outlook).pageDir;
+  fs.mkdirSync(dir, { recursive: true });
+  const file = path.join(dir, 'index.html');
+  fs.writeFileSync(file, html, 'utf8');
+  return file;
 }
 
 async function publish(log, cfg, opts) {
   const result = await attach(log, cfg, opts);
   const html = render(result, opts);
-  writePage(html);
+  writePage(html, opts.spec);
   return result;
 }
 
@@ -489,19 +537,20 @@ async function publish(log, cfg, opts) {
  * 主流程：留档 → 补齐行情与结论 → 写 out/outlook.json 与 out/outlook/index.html
  * opts: { config, newsRows, siteLinks, card, backfill, noFetch }
  */
-async function run(card, opts) {
+/** 两个名单共用的主流程：留档 → 补行情与结论 → 写 JSON 与静态页。 */
+async function runList(spec, picks, stampMs, opts) {
   opts = opts || {};
   const cfg = opts.config || collectMod.loadConfig();
   if (cfg.outlook && cfg.outlook.enabled === false) return { skipped: '已按配置关闭（config.outlook.enabled=false）' };
-  const log = loadLog();
-  const stamp = shanghai(new Date((card && card.updatedAt) || Date.now()).getTime());
+  const log = loadLog(spec);
+  const stamp = shanghai(Number(stampMs) || Date.now());
   const calDays = opts.calendar || await tradingDays(60);
   const entryDay = calDays.length ? resolveEntryDay(calDays, stamp.day) : stamp.day;
-  const hasPicks = !!(card && card.outlook && (card.outlook.picks || []).length);
+  const list = (picks || []).filter(function (p) { return p && p.code; });
   let skipped = null;
   let added = 0;
-  if (!hasPicks) {
-    skipped = '本轮行情卡片没有关注名单（沿用已留档数据）';
+  if (!list.length) {
+    skipped = '本轮没有可留档的名单（沿用已留档数据）';
   } else if (!entryDay || entryDay !== stamp.day) {
     skipped = '非交易日（最近交易日 ' + (entryDay || '未知') + '）';
   } else if (!calDays.length && (stamp.weekday === 0 || stamp.weekday === 6)) {
@@ -509,22 +558,53 @@ async function run(card, opts) {
   } else if (calDays.length && stamp.minutes < OPEN_MINUTE) {
     skipped = '开盘前快照（' + stamp.hm + '，快照仍是上一交易日收盘）';
   } else {
-    added = recordDay(log, card, stamp, entryDay, !!opts.backfill);
+    added = recordDay(log, list, stamp, entryDay, {
+      backfill: !!opts.backfill,
+      merge: spec.merge,
+      seedPct: opts.seedPct,
+      tone: opts.tone,
+      upRatio: opts.upRatio,
+    });
     if (!added) skipped = '当天名单无新增（已留档）';
   }
-  const result = await publish(log, cfg, Object.assign({}, opts, { config: cfg }));
-  saveLog(log);
+  const result = await publish(log, cfg, Object.assign({}, opts, { config: cfg, spec: spec }));
+  saveLog(log, spec);
   return Object.assign(result, {
     skipped: skipped,
     added: added,
     days: log.days.length,
     rows: result.lines.length,
     entryDay: entryDay,
+    dataFile: spec.dataFile,
   });
+}
+
+/** 明日看点 · 关注个股（名单来自 card.outlook.picks）。 */
+async function run(card, opts) {
+  opts = opts || {};
+  const o = (card && card.outlook) || {};
+  return runList(LISTS.outlook, o.picks || [], (card && card.updatedAt) || Date.now(), Object.assign({}, opts, {
+    seedPct: true,
+    tone: o.tone,
+    upRatio: o.upRatio,
+  }));
+}
+
+/** 财联社新闻股票看板 · 个股表现（名单来自 report.boardStocks 按动能排序后的结果）。 */
+async function runBoard(stocks, opts) {
+  opts = opts || {};
+  const picks = (stocks || []).map(function (s) {
+    return { code: s.code, name: s.name, theme: s.theme || '', score: s.mom === undefined ? null : s.mom };
+  });
+  return runList(LISTS.board, picks, opts.stampMs || Date.now(), Object.assign({}, opts, { seedPct: false }));
 }
 
 module.exports = {
   run: run,
+  runBoard: runBoard,
+  runList: runList,
+  LISTS: LISTS,
+  momentumOf: momentumOf,
   loadLog: loadLog,
   saveLog: saveLog,
   render: render,

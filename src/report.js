@@ -406,8 +406,32 @@ function boardThemes(conclusion) {
 function boardPct(item) { return item.nn ? mkPct(item.sum / item.nn) : '—'; }
 function boardWin(item) { return item.nn ? Math.round(item.wins / item.nn * 100) + '%' : '—'; }
 
+/**
+ * 新闻看板「个股表现」的候选池：把「新闻 × 股票」的记录聚合成每只股票的条数、平均涨幅、胜率。
+ * 只做聚合不做排序——排序（按 5 日动能）在 src/cli.js 里用日线缓存算，看板与明细页共用同一份顺序。
+ */
+function boardStocks(rows) {
+  const map = new Map();
+  for (const r of rows || []) {
+    const name = r && (r.stockName || r.stock);
+    if (!name) continue;
+    if (!map.has(name)) map.set(name, { name: name, code: r.stockCode || '', n: 0, nn: 0, sum: 0, wins: 0 });
+    const a = map.get(name);
+    if (!a.code && r.stockCode) a.code = r.stockCode;
+    a.n++;
+    const v = Number(r.changePct);
+    if (r.changePct !== null && r.changePct !== undefined && Number.isFinite(v)) {
+      a.nn++;
+      a.sum += v;
+      if (v > 0) a.wins++;
+    }
+  }
+  return Array.from(map.values());
+}
+
 /** 把新闻×股票的行聚合成题材 / 栏目 / 个股三个维度，并渲染成看板。 */
-function newsBoardHtml(rows) {
+function newsBoardHtml(rows, opts) {
+  opts = opts || {};
   const list = (rows || []).filter(function (r) { return r && (r.stockCode || r.stockName); });
   if (list.length < 5) return '';
   const pctOf = function (r) {
@@ -482,13 +506,24 @@ function newsBoardHtml(rows) {
       '<span class="mk-p ' + mkCls(rate - 0.5) + '">胜率 ' + boardWin(t) + '</span>' +
       '<span class="mk-fund">' + boardPct(t) + '</span></div>';
   }).join('');
-  const stockRows = byAvg(stock, 8).map(function (t, i) {
-    const code = Array.from(t.stocks)[0];
+  // 看板与明细页共用 cli.js 传来的同一份「按动能排序」名单；没有传（如本地只导表）时退回按平均涨幅
+  const useMomentum = !!(opts.boardStocks && opts.boardStocks.length);
+  const stockRows = (useMomentum ? opts.boardStocks.slice(0, 8) : byAvg(stock, 8)).map(function (t, i) {
+    const code = t.code || Array.from(t.stocks || [])[0] || '';
     const nameHtml = code
       ? '<a class="mk-link" href=' + Q + 'https://quote.eastmoney.com/' + encodeURIComponent(code) + '.html' + Q +
         ' target=' + Q + '_blank' + Q + ' rel=' + Q + 'noopener noreferrer' + Q + '>' + esc(t.name) + '</a>'
       : '<span class="mk-k">' + esc(t.name) + '</span>';
-    return cells(t, i, nameHtml, t.n + ' 条');
+    if (!useMomentum) return cells(t, i, nameHtml, t.n + ' 条');
+    const mom = t.mom;
+    const momHtml = mom === null || mom === undefined
+      ? '<span class="mk-p">动能 —</span>'
+      : '<span class="mk-p ' + mkCls(mom) + '">动能 ' + mkPct(mom) + '</span>';
+    return '<div class="mk-row"><span class="mk-rank' + (i < 3 ? ' top' : '') + '">' + (i + 1) + '</span>' +
+      nameHtml +
+      '<span class="mk-meta">' + t.n + ' 条 · 胜率 ' + boardWin(t) + '</span>' +
+      momHtml +
+      '<span class="mk-fund">' + boardPct(t) + '</span></div>';
   }).join('');
   const avgAll = nnAll ? sumAll / nnAll : null;
   const summary = '<div class="bd-stats">' +
@@ -508,7 +543,12 @@ function newsBoardHtml(rows) {
     '<div class="mkt-box"><div class="mkt-h">最热题材 / 板块（按提及次数）</div><div class="mkt-list">' + topicRows + '</div></div>',
     '<div class="mkt-box"><div class="mkt-h">各栏目表现（按平均涨幅）</div><div class="mkt-list">' + columnRows + '</div></div>',
     '<div class="mkt-box"><div class="mkt-h">各栏目胜率（样本 ≥ 2 条）</div><div class="mkt-list">' + winRows + '</div></div>',
-    '<div class="mkt-box"><div class="mkt-h">个股表现（按平均涨幅）</div><div class="mkt-list">' + stockRows + '</div></div>',
+    '<div class="mkt-box"><div class="mkt-h">个股表现（' + (useMomentum ? '按动能排序' : '按平均涨幅') + '）' +
+      (opts.boardHref
+        ? ' <a href=' + Q + esc(opts.boardHref) + Q + ' title=' + Q + '按添加日期查看这些个股的当日与 T+1~T+5 表现' + Q +
+          ' style=' + Q + 'margin-left:auto;color:#1257a8;font-weight:600;white-space:nowrap' + Q + '>明细表 →</a>'
+        : '') +
+      '</div><div class="mkt-list">' + stockRows + '</div></div>',
     '</div>',
     '</section>',
   ].join('\n');
@@ -524,6 +564,45 @@ const MARKET_CSS = ".mkt{position:relative;background:linear-gradient(180deg,#ff
 
 
 const CSS_BASE = "body{font-family:'Microsoft YaHei',system-ui,sans-serif;margin:24px;color:#1c1c1e;background:#fafafa}h1{font-size:20px;margin:0 0 6px}.meta{color:#666;font-size:13px;margin-bottom:16px}.meta a{white-space:nowrap}.hint{color:#888;font-size:12.5px}table{border-collapse:collapse;width:100%;background:#fff;font-size:13px;table-layout:fixed}th,td{border:1px solid #e5e5e5;padding:8px 10px;vertical-align:top;text-align:left;overflow-wrap:anywhere;word-break:break-word}th{background:#f2f3f5;position:sticky;top:0;z-index:2}td.t{white-space:normal;color:#555;font-variant-numeric:tabular-nums}td.txt{line-height:1.6;white-space:pre-wrap}td.src{white-space:nowrap;color:#888;font-size:12px}.pf{display:inline-block;background:#fff1e6;color:#c2410c;border:1px solid #ffd7bd;border-radius:3px;padding:1px 6px;white-space:normal;overflow-wrap:anywhere;word-break:break-word;line-height:1.45;text-align:center}.pl{display:inline-block;background:#eef4fb;color:#1257a8;border:1px solid #cfe0f2;border-radius:3px;padding:1px 6px;white-space:nowrap;font-size:12px;margin:0 3px 2px 0}a{color:#1257a8;text-decoration:none}a:hover{text-decoration:underline}.tw{background:#fff}" ;
+
+// ---------------- 页面最前边的直达入口 ----------------
+// 本看板各版本 + 数据文件 + 同账号下其他看板。全部用绝对地址，任何页面、本地打开都能直接点。
+const SITE_BASE = 'https://yunqingzou-bit.github.io/';
+const NAV_GROUPS = [
+  { label: '本看板', items: [
+    { label: '表格版', href: SITE_BASE + 'cls-news-dashboard/', title: '表格版（桌面默认）' },
+    { label: '卡片版', href: SITE_BASE + 'cls-news-dashboard/cards/', title: '卡片版（手机更好读）' },
+    { label: '明日关注个股明细', href: SITE_BASE + 'cls-news-dashboard/outlook/', title: '明日看点关注个股的历史明细表' },
+    { label: '新闻看板个股明细', href: SITE_BASE + 'cls-news-dashboard/stocks/', title: '财联社新闻股票看板 · 个股表现的历史明细表' },
+    { label: 'Stockbee 动量爆发', href: SITE_BASE + 'cls-news-dashboard/stockbee/', title: 'A股近三个月信号与前瞻收益' },
+  ] },
+  { label: '数据文件', items: [
+    { label: 'technical.json', href: SITE_BASE + 'cls-news-dashboard/technical.json', title: '技术面缓存（给程序用）', newTab: true },
+    { label: 'research.json', href: SITE_BASE + 'cls-news-dashboard/research.json', title: '调研缓存（给程序用）', newTab: true },
+    { label: 'stockbee.json', href: SITE_BASE + 'cls-news-dashboard/stockbee.json', title: 'Stockbee 研究数据', newTab: true },
+    { label: 'news.csv', href: SITE_BASE + 'cls-news-dashboard/news.csv', title: '新闻明细表（可下载表格文件）', newTab: true },
+  ] },
+  { label: '其他看板', items: [
+    { label: '财联社新闻精选20', href: SITE_BASE + 'cls-news-impact-dashboard/' },
+    { label: 'A股脉冲 · 实时行情雷达', href: SITE_BASE + 'cls-news-impact-dashboard/a-share-pulse/' },
+    { label: '选股策略回测看板', href: SITE_BASE + 'ashare-strategy-dashboard/', title: '回测区间 2026-07-13 ~ 09-11' },
+  ] },
+];
+
+const NAV_CSS = '.nav{display:flex;flex-wrap:wrap;gap:.5em 1.1em;align-items:center;background:#fff;border:1px solid #e3e8ef;border-radius:.8em;padding:.6em .8em;margin:0 0 1.1em;font-size:12.5px;box-shadow:0 1px 2px rgba(16,24,40,.04)}.nav-g{display:flex;flex-wrap:wrap;align-items:center;gap:.4em}.nav-g i{color:#8a929e;font-style:normal;font-weight:700}.nav-g a{display:inline-block;padding:.2em .62em;border:1px solid #d6e4ea;border-radius:999px;background:#f8fbfc;color:#155e75;text-decoration:none;white-space:nowrap}.nav-g a:hover{background:#e6f6f8;border-color:#9fd3dd}body.mk-phone .nav{font-size:26px}@media (max-width:760px){.nav{gap:.45em .8em;padding:.55em .6em}.nav-g{gap:.3em}}';
+
+function navHtml(opts) {
+  if (opts && opts.nav === false) return '';
+  const html = NAV_GROUPS.map(function (g) {
+    const items = g.items.map(function (it) {
+      // 看板之间同标签页切换（和标题栏的互跳一致）；数据文件另开标签页，点完不丢当前看板
+      return '<a href=' + Q + esc(it.href) + Q + (it.newTab ? ' target=' + Q + '_blank' + Q + ' rel=' + Q + 'noopener noreferrer' + Q : '') +
+        (it.title ? ' title=' + Q + esc(it.title) + Q : '') + '>' + esc(it.label) + '</a>';
+    }).join('');
+    return '<span class="nav-g"><i>' + esc(g.label) + '</i>' + items + '</span>';
+  }).join('');
+  return '<nav class="nav" aria-label="直达入口">' + html + '</nav>';
+}
 
 // 表格版：手机上仍然是表格，靠横向滚动保证列宽，避免挤压与文字重叠
 // 表格版：手机上不生成窄屏布局，而是把页面宽度声明为表格设计宽度（1080），
@@ -714,12 +793,13 @@ function toHtml(rows, meta, opts) {
     '<!doctype html>',
     '<html lang=' + Q + 'zh-CN' + Q + '><head><meta charset=' + Q + 'utf-8' + Q + '><meta name=' + Q + 'viewport' + Q + ' content=' + Q + viewportContent + Q + '>',
     '<title>财联社栏目新闻 ' + esc(meta.title || '') + '</title>',
-    '<style>' + CSS_BASE + mobileCss + BAR_CSS + EXTRA_CSS + MARKET_CSS + BOARD_CSS + MKT_TOGGLE_CSS + SORT_CSS + '</style></head><body>',
+    '<style>' + CSS_BASE + mobileCss + BAR_CSS + EXTRA_CSS + MARKET_CSS + BOARD_CSS + MKT_TOGGLE_CSS + SORT_CSS + NAV_CSS + '</style></head><body>',
+    navHtml(opts),
     '<h1>' + esc(meta.title || '财联社自选股 · 目标栏目新闻') + '</h1>',
     '<div class=' + Q + 'meta' + Q + '>区间 ' + esc(meta.range) + ' ｜ 共 ' + rows.length + ' 条 ｜ 股票池 ' + esc(meta.poolLabel) + ' ｜ 生成于 ' + esc(meta.generatedAt) + links + '</div>',
     hintHtml,
     marketCardHtml(meta.card, opts),
-    newsBoardHtml(rows),
+    newsBoardHtml(rows, opts),
     toolbar,
     '<div class=' + Q + 'tw' + Q + '><table>' + colgroup + '<thead><tr>' + th + '</tr></thead><tbody>',
     body,
@@ -780,7 +860,11 @@ function writeCardsVariant(rows, meta, opts, base) {
   const p = path.join(OUT_DIR, base + '-cards.html');
   // 卡片版挂在 /cards/ 下，链接要退回上一级才能指到 /outlook/
   const outlookHref = opts.outlookHref ? '../' + opts.outlookHref : '';
-  fs.writeFileSync(p, toHtml(rows, meta, { layout: 'cards', links: opts.cardsLinks || [], outlookHref: outlookHref }), 'utf8');
+  const boardHref = opts.boardHref ? '../' + opts.boardHref : '';
+  fs.writeFileSync(p, toHtml(rows, meta, {
+    layout: 'cards', links: opts.cardsLinks || [], outlookHref: outlookHref,
+    boardHref: boardHref, boardStocks: opts.boardStocks,
+  }), 'utf8');
   return p;
 }
 
@@ -801,4 +885,4 @@ function pruneExports(base, keepSets) {
 }
 
 module.exports = { exportAll: exportAll, toCsv: toCsv, toHtml: toHtml, HEADERS: HEADERS, TEXT_SOURCE_LABEL: TEXT_SOURCE_LABEL, OUT_DIR: OUT_DIR,
-  researchHtml: researchHtml, technicalHtml: technicalHtml, outlookShort: outlookShort };
+  researchHtml: researchHtml, technicalHtml: technicalHtml, outlookShort: outlookShort, boardStocks: boardStocks };

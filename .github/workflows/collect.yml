@@ -75,6 +75,8 @@ jobs:
           # 明日关注个股历史：首次上线用仓库里的种子，线上已有历史时以线上为准
           cp data/outlook-seed.json out/outlook.json 2>/dev/null || true
           curl -fsSL --retry 2 https://yunqingzou-bit.github.io/cls-news-dashboard/outlook.json -o out/outlook.new.json && mv out/outlook.new.json out/outlook.json || rm -f out/outlook.new.json
+          # 新闻看板个股明细：线上已有历史就以线上为准（首轮为空则从头开始记）
+          curl -fsSL --retry 2 https://yunqingzou-bit.github.io/cls-news-dashboard/stocks.json -o out/stocks.new.json && mv out/stocks.new.json out/stocks.json || rm -f out/stocks.new.json
 
       - name: 抓取（只跑沪深A股池，避免把个人自选股带进公开页面）
         env:
@@ -92,7 +94,7 @@ jobs:
 
       - name: 组装发布目录
         run: |
-          mkdir -p _site/cards _site/stockbee _site/outlook
+          mkdir -p _site/cards _site/stockbee _site/outlook _site/stocks
           cp out/cls-news-latest.html _site/index.html
           cp out/cls-news-cards.html  _site/cards/index.html
           cp out/cls-news-latest.csv  _site/news.csv
@@ -109,6 +111,14 @@ jobs:
             curl -fsSL --retry 2 https://yunqingzou-bit.github.io/cls-news-dashboard/outlook/index.html -o _site/outlook/index.html || true
             curl -fsSL --retry 2 https://yunqingzou-bit.github.io/cls-news-dashboard/outlook.json -o _site/outlook.json || true
           fi
+          if [ -f out/stocks/index.html ]; then
+            cp out/stocks/index.html _site/stocks/index.html
+            cp out/stocks.json       _site/stocks.json
+          else
+            echo 'WARN: 本轮未生成新闻看板个股明细，沿用线上上一版'
+            curl -fsSL --retry 2 https://yunqingzou-bit.github.io/cls-news-dashboard/stocks/index.html -o _site/stocks/index.html || true
+            curl -fsSL --retry 2 https://yunqingzou-bit.github.io/cls-news-dashboard/stocks.json -o _site/stocks.json || true
+          fi
           if [ -f out/stockbee/index.html ]; then
             cp out/stockbee/index.html _site/stockbee/index.html
             cp out/stockbee.csv        _site/stockbee/stockbee.csv
@@ -122,7 +132,7 @@ jobs:
           fi
           TZ=Asia/Shanghai date '+%Y-%m-%d %H:%M %Z' > _site/updated.txt
           echo '--- 明细 ---'
-          wc -c _site/index.html _site/cards/index.html _site/news.csv _site/stockbee/index.html _site/outlook/index.html
+          wc -c _site/index.html _site/cards/index.html _site/news.csv _site/stockbee/index.html _site/outlook/index.html _site/stocks/index.html
 
       - uses: actions/configure-pages@v5
         with:

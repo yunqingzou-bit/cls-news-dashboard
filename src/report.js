@@ -74,9 +74,11 @@ function forwardHtml(r) {
   if (!f) return '—';
   const item = function (label, v, extra) {
     const key = '<strong class=' + Q + 'research-key' + Q + '>' + label + '</strong>';
-    if (v === null || v === undefined) return '<div class=' + Q + 'research-item' + Q + '>' + key + '<span>待更新</span></div>';
+    if (v === null || v === undefined) return '<div class=' + Q + 'research-item' + Q + '>' + key + '待更新</div>';
     const cls = v > 0 ? 'f-up' : v < 0 ? 'f-down' : '';
-    return '<div class=' + Q + 'research-item' + Q + '>' + key + '<span class=' + Q + cls + Q + '>' + pct(v) + (extra || '') + '</span></div>';
+    const txt = pct(v) + (extra || '');
+    // 只有需要上色（涨红 / 跌绿）时才包 span，平盘和不带上色的值直接写文本
+    return '<div class=' + Q + 'research-item' + Q + '>' + key + (cls ? '<span class=' + Q + cls + Q + '>' + txt + '</span>' : txt) + '</div>';
   };
   const out = [item('当天', f.d0, f.close0 ? '（收 ' + num(f.close0) + '）' : '')];
   for (let i = 0; i < 5; i++) out.push(item(FORWARD_LABELS[i + 1], f.t[i]));
@@ -156,7 +158,10 @@ function labelledHtml(value, labelRe, render) {
   return fields.map(function (field, i) {
     const end = i + 1 < fields.length ? fields[i + 1].index : source.length;
     const text = source.slice(field.start, end).replace(/^[\s。]+|[\s。]+$/g, '');
-    return '<div class="research-item"><strong class="research-key">' + esc(field.label) + '：</strong><span>' + render(field.label, text) + '</span></div>';
+    // 没有需要高亮的片段时直接输出文本，省掉一层多余的 span（几百行 × 十几个字段，节点数差很多）
+    const body = render(field.label, text);
+    return '<div class="research-item"><strong class="research-key">' + esc(field.label) + '：</strong>' +
+      (body.indexOf('<') >= 0 ? '<span>' + body + '</span>' : body) + '</div>';
   }).join('');
 }
 
@@ -559,6 +564,14 @@ function newsBoardHtml(rows, opts) {
 const BOARD_CSS = ".bd-stats{display:flex;flex-wrap:wrap;gap:.4em 1.5em;margin:0 0 .9em;padding:.6em .8em;background:#f7f9fc;border:1px solid #eef2f7;border-radius:.56em;color:#5b6472;font-size:.95em}.bd-stats b{font-size:1.08em;color:#1f252c;font-variant-numeric:tabular-nums}";
 const MKT_TOGGLE_CSS = ".mk-click{cursor:pointer}.mk-click:hover{background:#f5f8fc}.mk-caret{flex:0 0 .9em;color:#aab2bd;font-size:.9em}.mk-click.open .mk-caret{transform:rotate(90deg)}.mk-sub{margin:.05em 0 .5em;padding:.1em 0 .1em .85em;border-left:2px solid #e3e8ef}.mk-sub[hidden]{display:none}.mk-subrow{border-bottom:0;padding:.04em 0;font-size:.96em}@media (max-width:760px){.mkt-grid,.mkt-hot{grid-template-columns:1fr}}";
 const SORT_CSS = "th.sortable{cursor:pointer;-webkit-user-select:none;user-select:none;white-space:nowrap}th.sortable:hover{background:#e9edf3}th.sortable::after{content:' ⇅';color:#b6bcc6}th.sortable.sorted::after{content:' ↓';color:#1257a8}th.sortable.sorted-asc::after{content:' ↑';color:#1257a8}";
+
+// 性能：页面实测 504 行 / 37,732 个节点 / 文档高 195,911px（新闻窗口满时按 800+ 行还会更多），
+// 桌面端的主要开销来自「文本排版」而不是网络。两处调整：
+//   · CSS_BASE 用的是 overflow-wrap:anywhere + word-break:break-word，等于允许在任意字符处断行，
+//     浏览器算可断点最费；这里覆盖成只在「整词放不下」时才断（中文本来就能逐字换行，视觉不变），排版更快。
+//   · 实测 Chrome 会忽略用在 <tr> 上的 content-visibility（对照实验：加与不加总高度都是 120667px），
+//     用在 <td> 上则会把行高压扁到内边距（18227px），所以这里不做 content-visibility，避免既有开销又没效果。
+const PERF_CSS = 'th,td{overflow-wrap:break-word;word-break:normal}';
 const CARD_SCRIPT = '<script>' + "(function(){\n  var els = document.querySelectorAll('[data-mk]');\n  function toggle(el){\n    var sub = document.getElementById(el.getAttribute('data-mk'));\n    if(!sub) return;\n    sub.hidden = !sub.hidden;\n    if(sub.hidden){ el.classList.remove('open'); } else { el.classList.add('open'); }\n  }\n  for (var i = 0; i < els.length; i++) {\n    (function(el){\n      el.addEventListener('click', function(){ toggle(el); });\n      el.addEventListener('keydown', function(e){ if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); toggle(el); } });\n    })(els[i]);\n  }\n})();" + '<' + '/script>';
 
 
@@ -722,9 +735,15 @@ function toHtml(rows, meta, opts) {
   if (!rows.length || !q || !pf) return;
   var initialQuery = new URLSearchParams(location.search).get('q');
   if (initialQuery) q.value = initialQuery;
-  // 行内可搜索文本预存到 Map：排序改变 DOM 顺序后仍与行一一对应
-  var searchText = new Map();
-  rows.forEach(function (r) { searchText.set(r, (r.textContent || '').toLowerCase()); });
+  // 行内可搜索文本：排序会改 DOM 顺序，所以用 Map 与行一一对应；改成第一次搜索时才建，
+  // 省掉加载时对几百行长文本的一整趟扫描
+  var searchText = null;
+  function textCache() {
+    if (searchText) return searchText;
+    searchText = new Map();
+    rows.forEach(function (r) { searchText.set(r, (r.textContent || '').toLowerCase()); });
+    return searchText;
+  }
   function fill(sel, attr, label, preferOrder) {
     if (!sel) return;
     var counts = {};
@@ -764,6 +783,7 @@ function toHtml(rows, meta, opts) {
   fill(ftrend, 'data-trend', '全部趋势');
   function apply() {
     var kw = q.value.trim().toLowerCase();
+    var cache = kw ? textCache() : null;
     var n = 0;
     for (var i = 0; i < rows.length; i++) {
       var el = rows[i];
@@ -771,13 +791,20 @@ function toHtml(rows, meta, opts) {
         (!fdate.value || el.getAttribute('data-date') === fdate.value) &&
         (!fplay.value || el.getAttribute('data-play') === fplay.value) &&
         (!ftrend.value || el.getAttribute('data-trend') === ftrend.value) &&
-        (!kw || (searchText.get(el) || '').indexOf(kw) > -1);
-      el.style.display = ok ? '' : 'none';
+        (!kw || (cache.get(el) || '').indexOf(kw) > -1);
+      // 只在显示状态真的要变时才写 style：初次渲染和反复筛选时能省掉几百次无意义的样式写入与重排
+      var want = ok ? '' : 'none';
+      if (el.style.display !== want) el.style.display = want;
       if (ok) n++;
     }
     cnt.textContent = '显示 ' + n + ' / ' + rows.length + ' 条';
   }
-  q.addEventListener('input', apply);
+  // 输入时别每敲一个字就全表扫描（几百行 × 长结论文字）：停 140ms 再过滤
+  var searchTimer = null;
+  q.addEventListener('input', function () {
+    if (searchTimer) clearTimeout(searchTimer);
+    searchTimer = setTimeout(apply, 140);
+  });
   [pf, fdate, fplay, ftrend].forEach(function (s) { if (s) s.addEventListener('change', apply); });
   // 表头点击排序：换手率 / 量较前日；空值恒排最后
   var sortKey = null;
@@ -817,7 +844,7 @@ function toHtml(rows, meta, opts) {
     '<!doctype html>',
     '<html lang=' + Q + 'zh-CN' + Q + '><head><meta charset=' + Q + 'utf-8' + Q + '><meta name=' + Q + 'viewport' + Q + ' content=' + Q + viewportContent + Q + '>',
     '<title>财联社栏目新闻 ' + esc(meta.title || '') + '</title>',
-    '<style>' + CSS_BASE + mobileCss + BAR_CSS + EXTRA_CSS + MARKET_CSS + BOARD_CSS + MKT_TOGGLE_CSS + SORT_CSS + NAV_CSS + '</style></head><body>',
+    '<style>' + CSS_BASE + mobileCss + BAR_CSS + EXTRA_CSS + MARKET_CSS + BOARD_CSS + MKT_TOGGLE_CSS + SORT_CSS + NAV_CSS + PERF_CSS + '</style></head><body>',
     navHtml(opts),
     '<h1>' + esc(meta.title || '财联社自选股 · 目标栏目新闻') + '</h1>',
     '<div class=' + Q + 'meta' + Q + '>区间 ' + esc(meta.range) + ' ｜ 共 ' + rows.length + ' 条 ｜ 股票池 ' + esc(meta.poolLabel) + ' ｜ 生成于 ' + esc(meta.generatedAt) + links + '</div>',

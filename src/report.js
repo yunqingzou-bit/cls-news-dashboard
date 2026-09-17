@@ -572,6 +572,20 @@ const SORT_CSS = "th.sortable{cursor:pointer;-webkit-user-select:none;user-selec
 //   · 实测 Chrome 会忽略用在 <tr> 上的 content-visibility（对照实验：加与不加总高度都是 120667px），
 //     用在 <td> 上则会把行高压扁到内边距（18227px），所以这里不做 content-visibility，避免既有开销又没效果。
 const PERF_CSS = 'th,td{overflow-wrap:break-word;word-break:normal}';
+
+// 多选筛选下拉：外观贴近原来的原生 select，展开是可勾多个值的浮层（原生 select multiple 在手机上是列表盒，不好用）
+const MSEL_CSS = '.msel{position:relative;display:inline-block;max-width:240px}'
+  + '.msel-btn{font:inherit;font-size:13px;min-height:34px;padding:7px 26px 7px 10px;border:1px solid #e5e5e5;border-radius:7px;background:#fff;color:#1c1c1e;cursor:pointer;text-align:left;width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;position:relative}'
+  + '.msel-btn:hover{border-color:#c9d8e0}.msel-btn:focus-visible{outline:2px solid #9fd3dd;outline-offset:1px}'
+  + '.msel-btn::after{content:"▾";position:absolute;right:8px;top:50%;transform:translateY(-50%);color:#8a929e;font-size:11px}'
+  + '.msel-pop{position:absolute;z-index:30;top:calc(100% + 4px);left:0;min-width:100%;max-width:24em;max-height:17em;overflow:auto;background:#fff;border:1px solid #e3e8ef;border-radius:8px;box-shadow:0 10px 26px rgba(16,24,40,.14);padding:6px}'
+  + '.msel-pop[hidden]{display:none}'
+  + '.msel-item{display:flex;align-items:center;gap:6px;padding:4px 6px;border-radius:6px;cursor:pointer;font-size:13px;white-space:nowrap}'
+  + '.msel-item:hover{background:#f2f7fa}.msel-item input{margin:0;flex:0 0 auto}'
+  + '.msel-foot{display:flex;gap:8px;border-bottom:1px solid #eef1f5;margin:0 0 4px;padding:0 0 6px;position:sticky;top:0;background:#fff}'
+  + '.msel-foot button{font:inherit;font-size:12px;padding:2px 8px;border:1px solid #d6e4ea;border-radius:6px;background:#f8fbfc;color:#155e75;cursor:pointer}'
+  + '.msel-foot button:hover{background:#e6f6f8}'
+  + '@media (max-width:760px){.msel{flex:1 1 100%;display:block;max-width:none}.msel-pop{max-width:none}}';
 const CARD_SCRIPT = '<script>' + "(function(){\n  var els = document.querySelectorAll('[data-mk]');\n  function toggle(el){\n    var sub = document.getElementById(el.getAttribute('data-mk'));\n    if(!sub) return;\n    sub.hidden = !sub.hidden;\n    if(sub.hidden){ el.classList.remove('open'); } else { el.classList.add('open'); }\n  }\n  for (var i = 0; i < els.length; i++) {\n    (function(el){\n      el.addEventListener('click', function(){ toggle(el); });\n      el.addEventListener('keydown', function(e){ if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); toggle(el); } });\n    })(els[i]);\n  }\n})();" + '<' + '/script>';
 
 
@@ -710,10 +724,11 @@ function toHtml(rows, meta, opts) {
   const toolbar = [
     '<div class=' + Q + 'bar' + Q + '>',
     '<input id=' + Q + 'q' + Q + ' type=' + Q + 'search' + Q + ' placeholder=' + Q + '搜索股票、标题或正文…' + Q + '>',
-    '<select id=' + Q + 'pf' + Q + '><option value=' + Q + Q + '>全部栏目</option></select>',
-    '<select id=' + Q + 'fdate' + Q + '><option value=' + Q + Q + '>全部日期</option></select>',
-    '<select id=' + Q + 'fplay' + Q + '><option value=' + Q + Q + '>全部短线博弈</option></select>',
-    '<select id=' + Q + 'ftrend' + Q + '><option value=' + Q + Q + '>全部趋势</option></select>',
+    // 四个筛选器都改成可多选的复选下拉，data-* 让脚本自己认领
+    '<div class=' + Q + 'msel' + Q + ' data-msel=' + Q + 'data-prefix' + Q + ' data-label=' + Q + '全部栏目' + Q + '></div>',
+    '<div class=' + Q + 'msel' + Q + ' data-msel=' + Q + 'data-date' + Q + ' data-label=' + Q + '全部日期' + Q + '></div>',
+    '<div class=' + Q + 'msel' + Q + ' data-msel=' + Q + 'data-play' + Q + ' data-label=' + Q + '全部短线博弈' + Q + ' data-prefer=' + Q + '适合,可关注,中性,不适合' + Q + '></div>',
+    '<div class=' + Q + 'msel' + Q + ' data-msel=' + Q + 'data-trend' + Q + ' data-label=' + Q + '全部趋势' + Q + '></div>',
     '<span class=' + Q + 'cnt' + Q + ' id=' + Q + 'cnt' + Q + '></span>',
     '</div>',
   ].join('');
@@ -721,10 +736,6 @@ function toHtml(rows, meta, opts) {
 (function(){
   var rows = [].slice.call(document.querySelectorAll('tbody tr'));
   var q = document.getElementById('q');
-  var pf = document.getElementById('pf');
-  var fdate = document.getElementById('fdate');
-  var fplay = document.getElementById('fplay');
-  var ftrend = document.getElementById('ftrend');
   var cnt = document.getElementById('cnt');
   var hint = document.getElementById('hint');
   if (hint && screen && screen.width && screen.width <= 760) {
@@ -732,7 +743,7 @@ function toHtml(rows, meta, opts) {
     hint.style.display = 'block';
   }
   ${phoneHook}
-  if (!rows.length || !q || !pf) return;
+  if (!rows.length || !q) return;
   var initialQuery = new URLSearchParams(location.search).get('q');
   if (initialQuery) q.value = initialQuery;
   // 行内可搜索文本：排序会改 DOM 顺序，所以用 Map 与行一一对应；改成第一次搜索时才建，
@@ -744,8 +755,14 @@ function toHtml(rows, meta, opts) {
     rows.forEach(function (r) { searchText.set(r, (r.textContent || '').toLowerCase()); });
     return searchText;
   }
-  function fill(sel, attr, label, preferOrder) {
-    if (!sel) return;
+  // 多选筛选：每个筛选器是一个复选下拉，可以同时勾多个值；不勾 = 该项不过滤
+  function closeAll() {
+    filters.forEach(function (f) { f.pop.hidden = true; f.btn.setAttribute('aria-expanded', 'false'); });
+  }
+  function buildFilter(box) {
+    var attr = box.getAttribute('data-msel');
+    var label = box.getAttribute('data-label') || '全部';
+    var prefer = (box.getAttribute('data-prefer') || '').split(',').filter(Boolean);
     var counts = {};
     var list = [];
     rows.forEach(function (r) {
@@ -754,10 +771,10 @@ function toHtml(rows, meta, opts) {
       if (counts[v] === undefined) { counts[v] = 0; list.push(v); }
       counts[v]++;
     });
-    if (preferOrder) {
+    if (prefer.length) {
       list.sort(function (a, b) {
-        var ia = preferOrder.indexOf(a);
-        var ib = preferOrder.indexOf(b);
+        var ia = prefer.indexOf(a);
+        var ib = prefer.indexOf(b);
         if (ia < 0) ia = 99;
         if (ib < 0) ib = 99;
         return ia - ib;
@@ -765,33 +782,95 @@ function toHtml(rows, meta, opts) {
     } else {
       list.sort(function (a, b) { return (counts[b] - counts[a]) || a.localeCompare(b); });
     }
-    sel.innerHTML = '';
-    var all = document.createElement('option');
-    all.value = '';
-    all.textContent = label;
-    sel.appendChild(all);
+    var state = { attr: attr, label: label, sel: {}, active: 0 };
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'msel-btn';
+    btn.setAttribute('aria-haspopup', 'true');
+    btn.setAttribute('aria-expanded', 'false');
+    var pop = document.createElement('div');
+    pop.className = 'msel-pop';
+    pop.hidden = true;
+    var foot = document.createElement('div');
+    foot.className = 'msel-foot';
+    var allBtn = document.createElement('button');
+    allBtn.type = 'button';
+    allBtn.textContent = '全选';
+    var noneBtn = document.createElement('button');
+    noneBtn.type = 'button';
+    noneBtn.textContent = '清空';
+    foot.appendChild(allBtn);
+    foot.appendChild(noneBtn);
+    pop.appendChild(foot);
+    var boxes = {};
+    function refreshLabel() {
+      var picked = Object.keys(state.sel);
+      if (!picked.length) btn.textContent = label;
+      else if (picked.length === 1) btn.textContent = picked[0];
+      else if (picked.length === 2) btn.textContent = picked[0] + '、' + picked[1];
+      else btn.textContent = picked[0] + '、' + picked[1] + ' 等 ' + picked.length + ' 项';
+    }
+    function setAll(on) {
+      Object.keys(boxes).forEach(function (v) {
+        boxes[v].checked = on;
+        if (on) state.sel[v] = 1; else delete state.sel[v];
+      });
+      state.active = on ? Object.keys(boxes).length : 0;
+      refreshLabel();
+      apply();
+    }
     list.forEach(function (v) {
-      var o = document.createElement('option');
-      o.value = v;
-      o.textContent = v + '（' + counts[v] + '）';
-      sel.appendChild(o);
+      var item = document.createElement('label');
+      item.className = 'msel-item';
+      var cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.value = v;
+      var sp = document.createElement('span');
+      sp.textContent = v + '（' + counts[v] + '）';
+      item.appendChild(cb);
+      item.appendChild(sp);
+      pop.appendChild(item);
+      boxes[v] = cb;
+      cb.addEventListener('change', function () {
+        if (cb.checked) state.sel[v] = 1; else delete state.sel[v];
+        state.active = Object.keys(state.sel).length;
+        refreshLabel();
+        apply();
+      });
     });
+    allBtn.addEventListener('click', function (e) { e.stopPropagation(); setAll(true); });
+    noneBtn.addEventListener('click', function (e) { e.stopPropagation(); setAll(false); });
+    btn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      var open = pop.hidden;
+      closeAll();
+      pop.hidden = !open;
+      btn.setAttribute('aria-expanded', String(!pop.hidden));
+    });
+    pop.addEventListener('click', function (e) { e.stopPropagation(); });
+    box.appendChild(btn);
+    box.appendChild(pop);
+    state.btn = btn;
+    state.pop = pop;
+    refreshLabel();
+    return state;
   }
-  fill(pf, 'data-prefix', '全部栏目');
-  fill(fdate, 'data-date', '全部日期');
-  fill(fplay, 'data-play', '全部短线博弈', ['适合', '可关注', '中性', '不适合']);
-  fill(ftrend, 'data-trend', '全部趋势');
+  var filters = [].slice.call(document.querySelectorAll('.msel')).map(buildFilter);
+  document.addEventListener('click', closeAll);
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeAll(); });
   function apply() {
     var kw = q.value.trim().toLowerCase();
     var cache = kw ? textCache() : null;
     var n = 0;
     for (var i = 0; i < rows.length; i++) {
       var el = rows[i];
-      var ok = (!pf.value || el.getAttribute('data-prefix') === pf.value) &&
-        (!fdate.value || el.getAttribute('data-date') === fdate.value) &&
-        (!fplay.value || el.getAttribute('data-play') === fplay.value) &&
-        (!ftrend.value || el.getAttribute('data-trend') === ftrend.value) &&
-        (!kw || (cache.get(el) || '').indexOf(kw) > -1);
+      var ok = true;
+      for (var f = 0; f < filters.length; f++) {
+        var obj = filters[f];
+        if (!obj.active) continue;
+        if (obj.sel[el.getAttribute(obj.attr) || ''] !== 1) { ok = false; break; }
+      }
+      if (ok && kw) ok = (cache.get(el) || '').indexOf(kw) > -1;
       // 只在显示状态真的要变时才写 style：初次渲染和反复筛选时能省掉几百次无意义的样式写入与重排
       var want = ok ? '' : 'none';
       if (el.style.display !== want) el.style.display = want;
@@ -805,7 +884,6 @@ function toHtml(rows, meta, opts) {
     if (searchTimer) clearTimeout(searchTimer);
     searchTimer = setTimeout(apply, 140);
   });
-  [pf, fdate, fplay, ftrend].forEach(function (s) { if (s) s.addEventListener('change', apply); });
   // 表头点击排序：换手率 / 量较前日；空值恒排最后
   var sortKey = null;
   var sortDir = -1;
@@ -844,7 +922,7 @@ function toHtml(rows, meta, opts) {
     '<!doctype html>',
     '<html lang=' + Q + 'zh-CN' + Q + '><head><meta charset=' + Q + 'utf-8' + Q + '><meta name=' + Q + 'viewport' + Q + ' content=' + Q + viewportContent + Q + '>',
     '<title>财联社栏目新闻 ' + esc(meta.title || '') + '</title>',
-    '<style>' + CSS_BASE + mobileCss + BAR_CSS + EXTRA_CSS + MARKET_CSS + BOARD_CSS + MKT_TOGGLE_CSS + SORT_CSS + NAV_CSS + PERF_CSS + '</style></head><body>',
+    '<style>' + CSS_BASE + mobileCss + BAR_CSS + EXTRA_CSS + MARKET_CSS + BOARD_CSS + MKT_TOGGLE_CSS + SORT_CSS + NAV_CSS + PERF_CSS + MSEL_CSS + '</style></head><body>',
     navHtml(opts),
     '<h1>' + esc(meta.title || '财联社自选股 · 目标栏目新闻') + '</h1>',
     '<div class=' + Q + 'meta' + Q + '>区间 ' + esc(meta.range) + ' ｜ 共 ' + rows.length + ' 条 ｜ 股票池 ' + esc(meta.poolLabel) + ' ｜ 生成于 ' + esc(meta.generatedAt) + links + '</div>',

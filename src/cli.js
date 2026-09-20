@@ -10,6 +10,7 @@ const technical = require('./technical.js');
 const top20 = require('./top20.js');
 const market = require('./market.js');
 const outlook = require('./outlook.js');
+const star = require('./star.js');
 
 function arg(name, fallback) {
   const i = process.argv.indexOf('--' + name);
@@ -153,6 +154,24 @@ function siteLinks() { return process.argv.includes('--site-links'); }
         (oo.skipped ? '本轮未新增（' + oo.skipped + '）' : '本轮新增 ' + oo.added + ' 只'));
     } catch (e) {
       console.log('明日关注个股：本轮生成失败（' + String((e && e.message) || e) + '），页面沿用上一版');
+    }
+  }
+  // 明星看点：每天 20:00（上海）重算一次，从当日看板涉及的股票里挑 3 只，渲染在「明日看点」里的超链接
+  if (meta.card) {
+    try {
+      const st = star.run(rows, {
+        technical: technical.loadCache().stocks || {},
+        research: research.loadCache().stocks || {},
+        hotSectors: ((meta.card.outlook && meta.card.outlook.sectors) || []).map(function (s) { return s.name; }),
+      });
+      meta.card.stars = st;
+      console.log('明星看点：' + (st.picks.length
+        ? st.picks.map(function (p) { return p.name + '(' + p.code + ' 分' + p.score + ')'; }).join('、')
+        : '本轮无') +
+        ' ｜ ' + (st.refreshed ? '本轮重算' : '沿用 ' + (st.date || '—') + ' ' + (st.hm || '')) +
+        ' ｜ 档位 ' + (st.tier || '-') + ' ｜ 留档 ' + st.historyDays + ' 天');
+    } catch (e) {
+      console.log('明星看点：本轮生成失败（' + String((e && e.message) || e) + '），本轮不显示');
     }
   }
   // 新闻看板「个股表现」：按 5 日动能排序（看板模块与明细页用同一份顺序）

@@ -72,6 +72,8 @@ jobs:
           curl -fsSL --retry 2 https://yunqingzou-bit.github.io/cls-news-dashboard/research.json -o data/research.json || true
           curl -fsSL --retry 2 https://yunqingzou-bit.github.io/cls-news-dashboard/technical.json -o data/technical.json || true
           curl -fsSL --retry 2 https://yunqingzou-bit.github.io/cls-news-dashboard/market.json -o data/market.json || true
+          # 明星看点的历史留档：线上已有就以线上为准（每天 20:00 重算并覆盖当天）
+          curl -fsSL --retry 2 https://yunqingzou-bit.github.io/cls-news-dashboard/stars.json -o data/stars.json || true
           # 明日关注个股历史：首次上线用仓库里的种子，线上已有历史时以线上为准
           cp data/outlook-seed.json out/outlook.json 2>/dev/null || true
           curl -fsSL --retry 2 https://yunqingzou-bit.github.io/cls-news-dashboard/outlook.json -o out/outlook.new.json && mv out/outlook.new.json out/outlook.json || rm -f out/outlook.new.json
@@ -103,6 +105,7 @@ jobs:
           cp data/research.json _site/research.json
           cp data/technical.json _site/technical.json
           cp data/market.json _site/market.json
+          cp data/stars.json _site/stars.json 2>/dev/null || true
           if [ -f out/outlook/index.html ]; then
             cp out/outlook/index.html _site/outlook/index.html
             cp out/outlook.json       _site/outlook.json

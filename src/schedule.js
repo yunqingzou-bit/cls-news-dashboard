@@ -5,6 +5,7 @@
  *   非交易日                -> 每 6 小时刷新一次
  *   交易日 07:00-16:00      -> 每 10 分钟刷新一次
  *   交易日 其他时段          -> 每 2 小时刷新一次
+ *   每天 20:00 之后           -> 至少刷新一次（出当天的「明星看点」，为次日找标的）
  *
  * 交易日怎么判断：
  *   1. 周六/周日直接算非交易日（不联网）；
@@ -33,6 +34,8 @@ const INTERVAL_MINUTES = {
   tradingOffHours: 120, // 交易日其他时段
   closed: 360, // 非交易日
 };
+
+const STAR_HOUR = 20; // 每天 20:00（上海）之后必须跑一轮，供「明星看点」当日重算
 
 const STATUS_URL_DEFAULT = 'https://yunqingzou-bit.github.io/cls-news-dashboard/status.json';
 
@@ -134,10 +137,18 @@ async function decide(opts) {
   const thresholdMinutes = policy.cronDriven ? policy.intervalMinutes : Math.max(1, policy.intervalMinutes - GRACE_MINUTES);
   const ageMinutes = last ? Math.floor((parts.epochMs - last) / 60000) : null;
   const remainingMs = last === null || last === undefined ? 0 : Math.max(0, thresholdMinutes * 60000 - (parts.epochMs - last));
-  const run = policy.cronDriven === true || last === null || last === undefined || remainingMs === 0;
+  // 每天 20:00 档：今天 20:00 之后还没发布过就执行一次（明星看点要用当日收盘数据重算）
+  const starAt = (function () {
+    const d = new Date(parts.epochMs + TZ_OFFSET_MINUTES * 60000);
+    d.setUTCHours(STAR_HOUR, 0, 0, 0);
+    return d.getTime() - TZ_OFFSET_MINUTES * 60000;
+  })();
+  const starDue = parts.epochMs >= starAt && (last === null || last === undefined || last < starAt);
+  const run = policy.cronDriven === true || starDue || last === null || last === undefined || remainingMs === 0;
   return {
     run: run,
     cronDriven: policy.cronDriven === true,
+    starDue: starDue,
     parts: parts,
     isTradingDay: trading.isTradingDay,
     tradingReason: trading.how,
@@ -160,6 +171,7 @@ function describe(result) {
   } else {
     lines.push('要求间隔 ' + result.intervalMinutes + ' 分钟（含 ' + (result.intervalMinutes - result.thresholdMinutes) + ' 分钟余量，实际达到 ' + result.thresholdMinutes + ' 分钟即刷新）');
   }
+  if (result.starDue) lines.push('触发原因 每天 20:00 的明星看点档，本轮必须执行');
   if (result.lastPublishedAt) {
     const d = new Date(result.lastPublishedAt);
     lines.push('上次发布 ' + d.toISOString() + '（距今 ' + result.ageMinutes + ' 分钟）');

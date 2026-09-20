@@ -222,6 +222,53 @@ function outlookShort(name) {
   return i >= 0 ? s.slice(i + 1) : s;
 }
 
+/** 明星看点的样式；用 em 单位，跟随 body.mk-phone .mkt 的字号一起缩放 */
+const STAR_CSS = ".star-wrap{margin:.9em 0 0;padding:.75em 0 0;border-top:1px dashed #e3e8ef}.star-hdrow{display:flex;align-items:center;gap:.5em;flex-wrap:wrap;margin:0 0 .55em}.star-title{font-weight:800;color:#1f252c;font-size:1.04em}.star-title::before{content:'';display:inline-block;width:.3em;height:.95em;border-radius:.14em;background:linear-gradient(180deg,#f0b23c,#e2662f);margin-right:.36em;vertical-align:-.08em}.star-badge{padding:.06em .52em;border-radius:999em;background:#fff7ed;border:1px solid #fed7aa;color:#b45309;font-size:.86em;font-weight:700}.star-meta{color:#8a929e;font-size:.9em}.star-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(15.5em,1fr));gap:.62em}.star-card{border:1px solid #eaeef4;border-radius:.62em;padding:.66em .72em .72em;background:linear-gradient(180deg,#fffdf8,#fff);min-width:0}.star-hd{display:flex;align-items:baseline;gap:.42em}.star-rank{flex:0 0 auto;min-width:1.4em;height:1.4em;line-height:1.4em;text-align:center;border-radius:.32em;background:linear-gradient(135deg,#f0b23c,#e2662f);color:#fff;font-size:.82em;font-weight:800}.star-name{font-weight:800;color:#1257a8;text-decoration:none;font-size:1.06em}.star-name:hover{text-decoration:underline}.star-code{color:#8a929e;font-size:.86em}.star-p{margin-left:auto;font-weight:700;font-variant-numeric:tabular-nums}.star-theme{color:#5b6472;font-size:.9em;margin:.28em 0 .36em}.star-levels{color:#2a3038;font-size:.9em;font-variant-numeric:tabular-nums;background:#f7f9fc;border-radius:.4em;padding:.3em .42em;line-height:1.7}.star-kv{color:#6b737e;font-size:.86em;margin-top:.3em;font-variant-numeric:tabular-nums}.star-why{color:#1f252c;font-size:.88em;margin-top:.34em;line-height:1.6}.star-risk{color:#b45309;font-size:.86em;margin-top:.24em;line-height:1.55}.star-cat{color:#8a929e;font-size:.84em;margin-top:.32em}.star-cat-row{line-height:1.5}";
+
+/**
+ * 明星看点：每天 20:00 由 src/star.js 重算的 3 只次日关注标的，股票名称本身就是超链接（腾讯行情）。
+ * 数据来自 card.stars，由 src/cli.js 写入。
+ */
+function starSection(card, opts) {
+  const st = card && card.stars;
+  if (!st || !st.picks || !st.picks.length) return '';
+  const cards = st.picks.map(function (p, i) {
+    const kv = [];
+    if (p.pe !== null && p.pe !== undefined) kv.push('PE ' + num(p.pe));
+    if (p.pb !== null && p.pb !== undefined) kv.push('PB ' + num(p.pb));
+    if (p.mcapYi !== null && p.mcapYi !== undefined) kv.push('市值 ' + num(p.mcapYi) + ' 亿');
+    if (p.profitYoy !== null && p.profitYoy !== undefined) kv.push('利润同比 ' + mkPct(p.profitYoy));
+    if (p.revYoy !== null && p.revYoy !== undefined) kv.push('营收同比 ' + mkPct(p.revYoy));
+    const tech = ['MA5 ' + num(p.ma5), 'MA20 ' + num(p.ma20), 'RSI ' + num(p.rsi14), '量比 ' + num(p.volRatio)].join(' · ');
+    const cats = (p.catalysts || []).map(function (c) {
+      return '<div class=\'star-cat-row\'>【' + esc(c.prefix || '') + '】' + esc(String(c.title || '').replace(/^\u3010[^\u3011]*\u3011\s*/, '')) + '</div>';
+    }).join('');
+    return '<div class=\'star-card\'>' +
+      '<div class=\'star-hd\'><span class=\'star-rank\'>' + (i + 1) + '</span>' +
+      '<a class=\'star-name\' href=' + Q + esc(p.url) + Q + ' target=' + Q + '_blank' + Q + ' rel=' + Q + 'noopener noreferrer' + Q + '>' + esc(p.name) + '</a>' +
+      '<span class=\'star-code\'>' + esc(p.code) + '</span>' +
+      '<span class=\'star-p ' + mkCls(p.chgPct) + '\'>' + mkPct(p.chgPct) + '</span></div>' +
+      '<div class=\'star-theme\'>' + esc(p.theme || '—') + '</div>' +
+      '<div class=\'star-levels\'>低吸 ' + num(p.entry) + ' ｜ 止损 ' + num(p.stop) + '（' + num(p.riskPct) + '%）｜ 目标 ' + num(p.target1) + ' / ' + num(p.target2) +
+        (p.rr ? ' ｜ 盈亏比 ' + num(p.rr) : '') + '</div>' +
+      '<div class=\'star-kv\'>' + tech + '</div>' +
+      (kv.length ? '<div class=\'star-kv\'>' + kv.join(' · ') + '</div>' : '') +
+      '<div class=\'star-why\'>' + esc((p.plus || []).slice(0, 3).join('；')) + '</div>' +
+      ((p.minus || []).length ? '<div class=\'star-risk\'>风险：' + esc(p.minus.join('；')) + '</div>' : '') +
+      cats + '</div>';
+  }).join('');
+  const stamp = st.date ? (st.date.slice(5) + (st.hm ? ' ' + st.hm : '')) : '';
+  return [
+    '<div class=\'star-wrap\'>',
+    '<div class=\'star-hdrow\'><span class=\'star-title\'>明星看点</span>' +
+      '<span class=\'star-badge\'>每天 20:00 重算</span>' +
+      '<span class=\'star-meta\'>' + (stamp ? '本版 ' + esc(stamp) + ' 生成 ｜ ' : '') + '为次日关注，点股票名看行情</span></div>',
+    '<div class=\'star-grid\'>' + cards + '</div>',
+    '<div class=\'mkt-note\'>口径：从当日看板涉及的股票里选，要求「处于当日主线 + 站上 20 日均线 + 市值与估值不过分 + 近期无风险公告」，再按趋势结构、动能、量能、基本面打分取前 ' + mkInt(st.picks.length) + ' 名（本版档位：' + esc(st.tierLabel || ('第 ' + (st.tier || 1) + ' 档')) + '）。低吸 / 止损 / 目标为规则推导的参考位，不是预测，不构成投资建议。</div>',
+    '</div>',
+  ].join('\n');
+}
+
 /**
  * 明日看点：由今日全市场动量推导的观察名单（板块 + 个股），不是预测。
  * 数据来自 src/market.js 的 card.outlook。
@@ -229,7 +276,10 @@ function outlookShort(name) {
 function outlookHtml(card, opts) {
   opts = opts || {};
   const o = card && card.outlook;
-  if (!o || !o.sectors || !o.sectors.length) return '';
+  const starBlock = starSection(card, opts);
+  if (!o || !o.sectors || !o.sectors.length) {
+    return starBlock ? '<div class="mkt-box mkt-wide"><div class="mkt-h">明日看点</div>' + starBlock + '</div>' : '';
+  }
   const b = card.breadth || {};
   const sectorRows = o.sectors.map(function (s, i) {
     return groupRow(s, i, {
@@ -263,6 +313,7 @@ function outlookHtml(card, opts) {
         : '') +
       '</div>' + pickRows + '</div>',
     '</div>',
+    starBlock,
     '<div class="mkt-note">口径：由今日全市场行情推导的动量观察名单，非预测。板块动能 = 均涨 + 上涨占比 + 强势股占比 + 主力净流入；个股分 = 涨幅 + 主力净流入 + 热门板块加成。涨停股收盘价买不到，名单最多 4 只涨停、每板块最多 3 只。样本为新闻与资金榜涉及的个股，不等于全市场板块广度。</div>',
     '</div>',
   ].join('\n');
@@ -922,7 +973,7 @@ function toHtml(rows, meta, opts) {
     '<!doctype html>',
     '<html lang=' + Q + 'zh-CN' + Q + '><head><meta charset=' + Q + 'utf-8' + Q + '><meta name=' + Q + 'viewport' + Q + ' content=' + Q + viewportContent + Q + '>',
     '<title>财联社栏目新闻 ' + esc(meta.title || '') + '</title>',
-    '<style>' + CSS_BASE + mobileCss + BAR_CSS + EXTRA_CSS + MARKET_CSS + BOARD_CSS + MKT_TOGGLE_CSS + SORT_CSS + NAV_CSS + PERF_CSS + MSEL_CSS + '</style></head><body>',
+    '<style>' + CSS_BASE + mobileCss + BAR_CSS + EXTRA_CSS + MARKET_CSS + STAR_CSS + BOARD_CSS + MKT_TOGGLE_CSS + SORT_CSS + NAV_CSS + PERF_CSS + MSEL_CSS + '</style></head><body>',
     navHtml(opts),
     '<h1>' + esc(meta.title || '财联社自选股 · 目标栏目新闻') + '</h1>',
     '<div class=' + Q + 'meta' + Q + '>区间 ' + esc(meta.range) + ' ｜ 共 ' + rows.length + ' 条 ｜ 股票池 ' + esc(meta.poolLabel) + ' ｜ 生成于 ' + esc(meta.generatedAt) + links + '</div>',

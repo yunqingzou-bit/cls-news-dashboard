@@ -209,6 +209,7 @@ function siteLinks() { return process.argv.includes('--site-links'); }
     layout: 'table',
     // Pages 上主页面是表格版，附带一个「卡片版」子页面；本地导出不加互跳链接，避免 file:// 打开时链接失效
     links: siteLinks() ? [{ href: 'cards/', label: '卡片版' }] : [],
+    marketReviewHref: siteLinks() ? 'https://yunqingzou-bit.github.io/cls-news-dashboard/market-review/' : '',
     alsoCards: true,
     cardsLinks: siteLinks() ? [{ href: '../', label: '表格版' }] : [],
     outlookHref: siteLinks() ? 'outlook/' : '',

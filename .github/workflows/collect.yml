@@ -96,9 +96,10 @@ jobs:
 
       - name: 组装发布目录
         run: |
-          mkdir -p _site/cards _site/stockbee _site/outlook _site/stocks
+          mkdir -p _site/cards _site/stockbee _site/outlook _site/stocks _site/market-review
           cp out/cls-news-latest.html _site/index.html
           cp out/cls-news-cards.html  _site/cards/index.html
+          cp market-review/index.html _site/market-review/index.html
           cp out/cls-news-latest.csv  _site/news.csv
           cp out/cls-news-latest.json _site/news.json
           cp out/status.json          _site/status.json

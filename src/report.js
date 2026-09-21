@@ -382,6 +382,11 @@ function marketCardHtml(card, opts) {
   opts = opts || {};
   if (!card || !card.breadth) return '';
   const b = card.breadth;
+  const marketReviewLink = opts.marketReviewHref
+    ? '<a class="mkt-review-link" href=' + Q + esc(opts.marketReviewHref) + Q +
+      ' target=' + Q + '_blank' + Q + ' rel=' + Q + 'noopener noreferrer' + Q +
+      ' style=' + Q + 'margin-left:auto;color:#1257a8;font-weight:700;text-decoration:none;white-space:nowrap' + Q + '>今日市场复盘 →</a>'
+    : '';
 
   const idxRows = (card.indexes || []).map(function (x) {
     const pct = Number(x.pct);
@@ -430,7 +435,7 @@ function marketCardHtml(card, opts) {
   return [
     '<section class="mkt">',
     '<div class="mkt-hd"><strong>当天行情</strong><span class="mkt-sub">沪深两市 ' + mkInt(card.total) +
-      ' 只 ｜ 截止 ' + esc(card.updatedText || '') + '（点名称看行情）</span></div>',
+      ' 只 ｜ 截止 ' + esc(card.updatedText || '') + '（点名称看行情）</span>' + marketReviewLink + '</div>',
     '<div class="mkt-grid">',
     '<div class="mkt-box"><div class="mkt-h">主要指数</div><div class="mkt-list">' + idxRows + '</div></div>',
     '<div class="mkt-box"><div class="mkt-h">市场涨跌</div>' + brBar + '<div class="mkt-stats">' + stats + '</div>' +

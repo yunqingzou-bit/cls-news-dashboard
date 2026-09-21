@@ -56,6 +56,8 @@ tr:hover td.name{background:#fafbfc}
 .rW{background:#eef0f3;color:#4b5563}
 .rL{background:#fde8e8;color:#b91c1c}
 .muted{color:var(--dim)}
+.stock-link{color:#1d4ed8;text-decoration:none}
+.stock-link:hover{text-decoration:underline}
 .foot{font-size:12px;color:var(--dim);margin-top:10px;line-height:1.8}
 .more{display:block;margin:10px auto 0;padding:9px 18px;border-radius:8px;border:1px solid var(--line);background:#fff;cursor:pointer}
 .h2{font-size:14px;font-weight:600;margin:0 0 8px}
@@ -173,6 +175,10 @@ tr:hover td.name{background:#fafbfc}
     }
     return String(v);
   }
+  function txUrl(code){ return 'https://gu.qq.com/'+encodeURIComponent(code||''); }
+  function stockLink(code,name,title){
+    return '<a class="stock-link" href="'+txUrl(code)+'" target="_blank" rel="noopener noreferrer" title="'+(title||'在腾讯自选股查看行情与K线')+'">'+(name||code||'')+'</a>';
+  }
   function rcls(r){ return r==='A'?'rA':r==='A-'?'rAm':r==='B'?'rB':'rW'; }
   function card(k,v){ return '<div class="card"><div class="k">'+k+'</div><div class="v">'+(v===null||v===undefined?'—':v)+'</div></div>'; }
   function bar(v,max){
@@ -245,7 +251,7 @@ tr:hover td.name{background:#fafbfc}
         var cls=c.c==='l'?'l':c.c==='c'?'c':'';
         if(c.sticky) cls+=' name';
         if(c.k==='name'){
-          return '<td class="'+cls+'" title="'+r.pattern+'">'+r.name+(r.limitUp?' <span class="tag rL">涨停</span>':'')+'</td>';
+          return '<td class="'+cls+'" title="'+r.pattern+'">'+stockLink(r.code,r.name,'在腾讯自选股查看行情与K线')+(r.limitUp?' <span class="tag rL">涨停</span>':'')+'</td>';
         }
         if(c.k==='board') return '<td class="'+cls+'" title="行业：'+(r.industry||'—')+'">'+(r.board||'<span class="muted">未知</span>')+(r.themeKnown?'':' <span class="tag rW">题材未知</span>')+'</td>';
         if(c.k==='total') return '<td class="'+cls+'"><b>'+r.total.toFixed(1)+'</b> <span class="muted">'+bar(r.total,100)+'</span></td>';
@@ -274,7 +280,7 @@ tr:hover td.name{background:#fafbfc}
     document.getElementById('histTbl').querySelector('thead').innerHTML='<tr>'+hcols.map(function(c){ return '<th class="'+(c.c==='l'?'l':c.c||'')+'"'+(c.k==='name'?' style="position:sticky;left:0;background:#f0f2f5"':'')+'>'+c.t+'</th>'; }).join('')+'</tr>';
     document.getElementById('histTbl').querySelector('tbody').innerHTML=HISTORY.slice(0,HIST_SHOWN).map(function(r){
       return '<tr>'+hcols.map(function(c){
-        if(c.k==='name') return '<td class="l" style="position:sticky;left:0;background:#fff">'+r.name+(r.limitUp?' <span class="tag rL">涨停</span>':'')+'</td>';
+        if(c.k==='name') return '<td class="l" style="position:sticky;left:0;background:#fff">'+stockLink(r.code,r.name,'在腾讯自选股查看行情与K线')+(r.limitUp?' <span class="tag rL">涨停</span>':'')+'</td>';
         if(c.k==='cum5'&&!r.complete) return '<td><span class="tag rW">待更新</span></td>';
         return '<td class="'+(c.c==='l'?'l':c.c==='c'?'c':'')+'">'+fmt(r[c.k],c)+'</td>';
       }).join('')+'</tr>';
@@ -316,7 +322,7 @@ tr:hover td.name{background:#fafbfc}
         var cls=c.c==='l'?'l':c.c==='c'?'c':'';
         if(c.sticky) cls+=' name';
         if(c.k==='date') return '<td class="'+cls+'">'+r.date+(r.complete?'':' <span class="tag rW">待更新</span>')+'</td>';
-        if(c.k==='name') return '<td class="'+cls+'" title="基底 '+r.baseDays+' 天 / 宽 '+r.baseWidth+'%">'+r.name+'</td>';
+        if(c.k==='name') return '<td class="'+cls+'" title="基底 '+r.baseDays+' 天 / 宽 '+r.baseWidth+'%">'+stockLink(r.code,r.name,'在腾讯自选股查看行情与K线')+'</td>';
         if(c.k==='pattern') return '<td class="'+cls+'"><span class="tag">'+r.pattern+'</span></td>';
         if(c.k==='rating') return '<td class="'+cls+'"><span class="tag '+rcls(r.rating)+'">'+r.rating+'</span></td>';
         if(c.k==='winRate') return '<td class="'+cls+'">'+(r.winRate===null?'—':r.winRate+'% <span class="muted">('+r.winDays+'/'+r.haveDays+')</span>')+'</td>';

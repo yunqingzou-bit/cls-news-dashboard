@@ -7,6 +7,7 @@ data/watchlist.json
 data/research.json
 data/technical.json
 data/market.json
+data/theme.json
 data/stars.json
 
 # 含口令的本地配置

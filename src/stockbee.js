@@ -27,17 +27,27 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const collect = require('./collect.js');
+const picksMod = require('./stockbee-picks.js');
+const themeApi = require('./theme.js');
+const pageMod = require('./stockbee-page.js');
 
 const OUT_DIR = path.join(collect.ROOT, 'out');
 const JSON_FILE = path.join(OUT_DIR, 'stockbee.json');
 const CSV_FILE = path.join(OUT_DIR, 'stockbee.csv');
 const HTML_FILE = path.join(OUT_DIR, 'stockbee', 'index.html');
 const BARS_CACHE = path.join(OUT_DIR, 'stockbee-bars.json');
+const PICKS_FILE = path.join(OUT_DIR, 'stockbee-picks.json');
+const PICKS_CSV = path.join(OUT_DIR, 'stockbee-picks.csv');
 
 const TX_URL = 'https://web.ifzq.gtimg.cn/appstock/app/fqkline/get';
 const SINA_URL = 'https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CN_MarketData.getKLineData';
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131 Safari/537.36';
 const INDEX_CODE = 'sh000001';
+
+/** A 股涨跌幅上限：创业板（300/301）与科创板（688）是 20%，其余主板 10%。 */
+function limitOf(code) {
+  return /^(sz30[01]|sh688)/.test(code) ? 20 : 10;
+}
 
 const DEFAULTS = {
   months: 3,
@@ -62,6 +72,12 @@ const DEFAULTS = {
   require4pct: true,
   maxRows: 12000,
   maxScanMinutes: 25,
+  // 精选（多因子名单）
+  pickMax: 20,
+  preRank: 60,
+  minAmountYi: 1.5,
+  maxPickRisk: 8,
+  useTheme: true,
 };
 
 /* ------------------------------------------------------------ 工具 */
@@ -78,6 +94,9 @@ function parseArgs(argv) {
     else if (a === '--limit') o.limit = Number(next());
     else if (a === '--min-score') o.minScore = Number(next());
     else if (a === '--max-rows') o.maxRows = Number(next());
+    else if (a === '--picks') o.pickMax = Number(next());
+    else if (a === '--pre-rank') o.preRank = Number(next());
+    else if (a === '--no-theme') o.useTheme = false;
     else if (a === '--any-trigger') o.require4pct = false;
     else if (a === '--max-scan-minutes') o.maxScanMinutes = Number(next());
     else if (a === '--include-st') o.includeSt = true;
@@ -197,6 +216,59 @@ function closeLocation(bar) {
   const r = bar.h - bar.l;
   if (r <= 0) return 50;
   return ((bar.c - bar.l) / r) * 100;
+}
+
+/* 走势技术形态用到的指标序列：一次算好整条序列，再按触发日索引取值，避免逐行重复计算。 */
+
+/** 简单均线序列：ma[i] = 最近 n 根（含 i）收盘均值，长度不足为 null。 */
+function smaSeries(closes, n) {
+  const out = new Array(closes.length).fill(null);
+  let sum = 0;
+  for (let i = 0; i < closes.length; i++) {
+    sum += closes[i];
+    if (i >= n) sum -= closes[i - n];
+    if (i >= n - 1) out[i] = sum / n;
+  }
+  return out;
+}
+
+function emaSeries(values, n) {
+  const out = new Array(values.length).fill(null);
+  const k = 2 / (n + 1);
+  let prev = null;
+  for (let i = 0; i < values.length; i++) {
+    prev = prev === null ? values[i] : values[i] * k + prev * (1 - k);
+    out[i] = prev;
+  }
+  return out;
+}
+
+/** MACD(12,26,9)：dif = EMA12-EMA26，dea = EMA9(dif)，hist = (dif-dea)*2。 */
+function macdSeries(closes) {
+  const e12 = emaSeries(closes, 12), e26 = emaSeries(closes, 26);
+  const dif = closes.map(function (_, i) { return e12[i] - e26[i]; });
+  const dea = emaSeries(dif, 9);
+  const hist = dif.map(function (v, i) { return (v - dea[i]) * 2; });
+  return { dif: dif, dea: dea, hist: hist };
+}
+
+/** RSI(n)，Wilder 平滑。 */
+function rsiSeries(closes, n) {
+  const out = new Array(closes.length).fill(null);
+  let ag = 0, al = 0;
+  for (let i = 1; i < closes.length; i++) {
+    const ch = closes[i] - closes[i - 1];
+    const g = ch > 0 ? ch : 0, l = ch < 0 ? -ch : 0;
+    if (i <= n) {
+      ag += g / n; al += l / n;
+      if (i === n) out[i] = al === 0 ? 100 : 100 - 100 / (1 + ag / al);
+      continue;
+    }
+    ag = (ag * (n - 1) + g) / n;
+    al = (al * (n - 1) + l) / n;
+    out[i] = al === 0 ? 100 : 100 - 100 / (1 + ag / al);
+  }
+  return out;
 }
 
 /** 与 skill 一致的基底识别：在触发日之前找宽度 <= maxWidth 且平均振幅 <= maxAvgRange 的最长窗口。 */
@@ -440,9 +512,18 @@ async function loadBarsMap(codes, o, log) {
   return { bars: out, failed: failed };
 }
 
-function analyzeStock(stock, bars, o, gateMap, windowStart) {
+function analyzeStock(stock, bars, o, gateMap, windowStart, ctx) {
   const found = [];
   const lastIdx = bars.length - 1;
+  // 走势技术形态：整条序列一次算好（同一根 K 线内所有指标同口径，不存在未来数据）
+  const closes = bars.map(function (b) { return b.c; });
+  const ma5 = smaSeries(closes, 5);
+  const ma10 = smaSeries(closes, 10);
+  const ma20s = smaSeries(closes, 20);
+  const ma60s = smaSeries(closes, 60);
+  const macd = macdSeries(closes);
+  const rsi14 = rsiSeries(closes, 14);
+  const idxMom = (ctx && ctx.idxMom20) || null;
   for (let i = 40; i <= lastIdx; i++) {
     const day = bars[i].day;
     if (day < windowStart) continue;
@@ -467,6 +548,21 @@ function analyzeStock(stock, bars, o, gateMap, windowStart) {
     const cum5 = i + 5 <= lastIdx ? ((bars[i + 5].c / cur.c) - 1) * 100 : null;
     const winDays = have.filter(function (x) { return x > 0; }).length;
     const winRate = have.length ? (winDays / have.length) * 100 : null;
+
+    // 精选（多因子排序）需要的动量与可执行性字段：都在同一根 K 线上算，口径一致
+    const ref20 = bars[i - 20] ? bars[i - 20].c : null;
+    const ref5 = bars[i - 5] ? bars[i - 5].c : null;
+    let hi60 = 0;
+    for (let k = Math.max(0, i - 59); k <= i; k++) if (bars[k].c > hi60) hi60 = bars[k].c;
+    const limit = limitOf(stock.code);
+    // 走势技术形态：均线排列、趋势阶段、MACD/RSI 状态、高位结构
+    const ma20v = ma20s[i], ma60v = ma60s[i];
+    const stack = ma20v !== null && ma60v !== null
+      ? [cur.c > ma5[i], ma5[i] > ma10[i], ma10[i] > ma20v, ma20v > ma60v].filter(Boolean).length
+      : null;
+    let hi20 = 0;
+    for (let k = Math.max(0, i - 19); k <= i; k++) if (bars[k].c > hi20) hi20 = bars[k].c;
+    const mom20v = ref20 ? (cur.c / ref20 - 1) * 100 : null;
 
     found.push({
       date: day,
@@ -497,6 +593,22 @@ function analyzeStock(stock, bars, o, gateMap, windowStart) {
       volume: Math.round(cur.v / 100),
       soft: sc.soft,
       gate: gate.label,
+      parts: sc.parts,
+      amountYi: round((cur.c * cur.v) / 1e8, 2),
+      mom20: ref20 ? round((cur.c / ref20 - 1) * 100, 1) : null,
+      mom5: ref5 ? round((cur.c / ref5 - 1) * 100, 1) : null,
+      dist60: hi60 > 0 ? round((hi60 - cur.c) / hi60 * 100, 1) : null,
+      limitUp: trigger.gain >= limit - 0.3,
+      flatBoard: cur.h === cur.l,
+      maStack: stack,
+      aboveMa20: cur.c > ma20v,
+      ma20Up: i >= 5 && ma20s[i - 5] !== null && ma20v > ma20s[i - 5],
+      ma60Up: i >= 10 && ma60s[i - 10] !== null && ma60v > ma60s[i - 10],
+      macdOk: macd.dif[i] > macd.dea[i],
+      macdHist: round(macd.hist[i], 3),
+      rsi14: rsi14[i] === null ? null : round(rsi14[i], 1),
+      dd20: hi20 > 0 ? round((hi20 - cur.c) / hi20 * 100, 1) : null,
+      rs20: mom20v !== null && idxMom ? round(mom20v - (idxMom.get(day) || 0), 1) : null,
     });
   }
   return found;
@@ -555,6 +667,140 @@ function buildStats(rows) {
   };
 }
 
+/* ------------------------------------------------------------ 精选：多因子 + 题材 */
+
+/** 全市场逐日面板：上涨/下跌家数、涨幅≥4% 家数，用于市场环境分与页面展示。 */
+function buildPanels(barsMap, windowStart, lastDay) {
+  const panels = new Map();
+  for (const bars of barsMap.values()) {
+    for (let i = 1; i < bars.length; i++) {
+      const day = bars[i].day;
+      if (day < windowStart || day > lastDay) continue;
+      const prev = bars[i - 1];
+      if (!(prev.c > 0)) continue;
+      const pct = (bars[i].c / prev.c - 1) * 100;
+      if (!panels.has(day)) panels.set(day, { n: 0, up: 0, down: 0, brk4: 0, strong: 0 });
+      const p = panels.get(day);
+      p.n++;
+      if (pct > 0) p.up++; else if (pct < 0) p.down++;
+      if (pct >= 4) p.brk4++;
+      if (pct >= 9.7) p.strong++;
+    }
+  }
+  return panels;
+}
+
+/** 第一步：逐日粗排（形态 + 动量 + 市场 + 风险），并收集需要补题材数据的股票。 */
+function pickStage1(rows, panels, gateMap, o) {
+  const byDay = new Map();
+  for (const r of rows) {
+    if (!byDay.has(r.date)) byDay.set(r.date, []);
+    byDay.get(r.date).push(r);
+  }
+  const days = Array.from(byDay.keys()).sort().reverse();
+  const stage = new Map();
+  const codes = new Set();
+  for (const day of days) {
+    const panel = panels.get(day) || null;
+    const gate = gateMap.get(day) || { score: 3, label: '中性' };
+    const list = picksMod.preRank(byDay.get(day), panel, gate.score, o);
+    for (const c of list) {
+      c.day = day;
+      c.gateLabel = gate.label;
+      c.upRatio = panel && (panel.up + panel.down) ? Math.round((panel.up / (panel.up + panel.down)) * 100) : null;
+      codes.add(c.row.code);
+    }
+    stage.set(day, list);
+  }
+  return { days: days, stage: stage, codes: Array.from(codes), byDay: byDay };
+}
+
+/** 第二步：补上题材分后按分散约束取 ≤N 只。 */
+function pickStage2(stage, theme, o) {
+  const out = new Map();
+  for (const day of stage.days) {
+    const cands = picksMod.applyTheme(stage.stage.get(day), theme, themeApi);
+    const picked = picksMod.selectTop(cands, o);
+    out.set(day, picked.map(function (c, i) {
+      const p = picksMod.toPick(c, i);
+      p.gate = c.gateLabel;
+      p.upRatio = c.upRatio;
+      return p;
+    }));
+  }
+  return out;
+}
+
+/** 精选回溯：同一套规则套在过去每个交易日上，和「全部信号」基准对比。 */
+function picksBacktest(days, picksByDay, baseByDay) {
+  const agg = function (list) {
+    const done = list.filter(function (p) { return p.complete && p.cum5 !== null && p.cum5 !== undefined; });
+    if (!done.length) return null;
+    const sums = done.map(function (p) { return p.cum5; });
+    const sorted = sums.slice().sort(function (a, b) { return a - b; });
+    const median = sorted.length % 2 ? sorted[(sorted.length - 1) / 2] : (sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2;
+    return {
+      n: done.length,
+      avg5: round(sums.reduce(function (s, x) { return s + x; }, 0) / done.length, 2),
+      median5: round(median, 2),
+      winRate5d: round((sums.filter(function (x) { return x > 0; }).length / done.length) * 100, 1),
+      best5: round(Math.max.apply(null, sums), 2),
+      worst5: round(Math.min.apply(null, sums), 2),
+    };
+  };
+  const allPicks = [];
+  const allBase = [];
+  const rows = [];
+  for (const day of days) {
+    const p = picksByDay.get(day) || [];
+    const b = baseByDay.get(day) || [];
+    for (const x of p) allPicks.push(x);
+    for (const x of b) allBase.push(x);
+    const pa = agg(p);
+    const ba = agg(b);
+    rows.push({
+      date: day,
+      n: p.length,
+      avg5: pa ? pa.avg5 : null,
+      winRate5d: pa ? pa.winRate5d : null,
+      baseN: b.length,
+      baseAvg5: ba ? ba.avg5 : null,
+      baseWinRate5d: ba ? ba.winRate5d : null,
+      edge: pa && ba ? round(pa.avg5 - ba.avg5, 2) : null,
+    });
+  }
+  const pa = agg(allPicks);
+  const ba = agg(allBase);
+  return {
+    picks: pa,
+    baseline: ba,
+    edgeAvg5: pa && ba ? round(pa.avg5 - ba.avg5, 2) : null,
+    edgeWinRate: pa && ba ? round(pa.winRate5d - ba.winRate5d, 1) : null,
+    days: rows,
+  };
+}
+
+function payloadTime() {
+  return new Date().toISOString().replace('T', ' ').slice(0, 19) + ' UTC';
+}
+
+/** 精选名单的口径说明（会写进 JSON 和页面页脚，避免脱离上下文引用）。 */
+function pickNote(o, picks) {
+  const bt = picks.backtest || {};
+  const pa = bt.picks || null;
+  const ba = bt.baseline || null;
+  const cmp = (pa && ba)
+    ? '同窗口回溯：精选 ' + pa.n + ' 个样本，5 日累计均值 ' + pa.avg5 + '%、正收益率 ' + pa.winRate5d + '%；全部信号基准 ' + ba.n + ' 个样本，均值 ' + ba.avg5 + '%、正收益率 ' + ba.winRate5d + '%，超额 ' + bt.edgeAvg5 + ' 个百分点。'
+    : '';
+  return '精选口径：每个交易日从全部 4% 突破信号里，按「突破形态20 + 走势技术形态25 + 动量大小25 + 题材热度20 + 市场环境5 + 风险可执行5」排序，' +
+    '再做分散约束（同板块≤' + picks.params.perTheme + ' 只、同行业≤' + picks.params.perIndustry + ' 只、涨停股≤' + picks.params.maxLimitUp + ' 只），最多取 ' + picks.params.maxPicks + ' 只；' +
+    '硬性条件：成交额≥' + picks.params.minAmountYi + ' 亿、止损距离≤' + picks.params.maxRiskPct + '%、剔除一字板。' +
+    '走势技术形态衡量的是触发前的趋势结构（均线排列、MA20/MA60 方向、MACD、RSI14、近 20 日高位结构），不是突破当天的形态。' +
+    '题材热度来自东方财富板块行情与板块日线，取该股所属板块中当日最强的一个板块及其近 5 日涨幅；' +
+    '板块成分关系用的是抓取当日快照回溯历史，存在轻微前视，且覆盖不到全部个股（本轮 ' + picks.coverage.candidates + ' 只候选）。' +
+    'T+N 与 5 日累计是事后统计，用于评估规则而不是预测。' + cmp;
+}
+
 /* ------------------------------------------------------------ 输出 */
 
 function csvCell(v) {
@@ -577,218 +823,17 @@ function writeCsv(rows) {
   fs.writeFileSync(CSV_FILE, '\ufeff' + lines.join('\n'), 'utf8');
 }
 
-function renderHtml() {
-  return `<!doctype html>
-<html lang="zh-CN">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="theme-color" content="#0f172a">
-<title>Stockbee 动量爆发 · A股近三个月信号与前瞻收益</title>
-<style>
-:root{--bg:#f5f6f8;--card:#fff;--line:#e5e7eb;--ink:#1b1f24;--dim:#7a8290;--up:#d92b2b;--down:#0f9d58;--brand:#0f172a}
-*{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.55 "Microsoft YaHei",system-ui,-apple-system,"Segoe UI",sans-serif}
-header{background:var(--brand);color:#fff;padding:14px 16px 12px}
-h1{font-size:17px;margin:0;font-weight:600}
-.sub{font-size:12px;opacity:.82;margin-top:4px}
-.wrap{padding:12px 10px 40px;max-width:1500px;margin:0 auto}
-.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:12px}
-.card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:9px 11px}
-.card .k{font-size:11.5px;color:var(--dim)}
-.card .v{font-size:19px;font-weight:700;margin-top:2px;font-variant-numeric:tabular-nums}
-.panel{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:10px;margin-bottom:10px}
-.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
-select,input{font:inherit;padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:#fff;color:var(--ink);max-width:100%}
-input[type=search]{min-width:170px}
-.tabs{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
-.tab{border:1px solid var(--line);background:#fff;border-radius:999px;padding:4px 11px;font-size:12.5px;cursor:pointer}
-.tab.on{background:var(--brand);color:#fff;border-color:var(--brand)}
-.scroll{background:var(--card);border:1px solid var(--line);border-radius:8px;overflow:auto;max-height:76vh}
-table{border-collapse:separate;border-spacing:0;width:100%;font-size:12.5px;white-space:nowrap}
-th,td{padding:7px 9px;border-bottom:1px solid var(--line);text-align:right;font-variant-numeric:tabular-nums}
-th{position:sticky;top:0;background:#f0f2f5;z-index:3;font-weight:600;cursor:pointer;user-select:none}
-th.c,td.c{text-align:center}
-th.l,td.l{text-align:left}
-td.name,th.name{position:sticky;left:0;background:#fff;z-index:2}
-th.name{background:#f0f2f5;z-index:4}
-tr:hover td{background:#fafbfc}
-tr:hover td.name{background:#fafbfc}
-.up{color:var(--up)}
-.down{color:var(--down)}
-.tag{display:inline-block;font-size:11.5px;border-radius:4px;padding:1px 6px;background:#eef2f7;color:#33415c}
-.rA{background:#fde8e8;color:#b91c1c}
-.rAm{background:#fdeede;color:#b45309}
-.rB{background:#e8f2fd;color:#1d4ed8}
-.rW{background:#eef0f3;color:#4b5563}
-.muted{color:var(--dim)}
-.foot{font-size:12px;color:var(--dim);margin-top:10px;line-height:1.8}
-.more{display:block;margin:10px auto 0;padding:9px 18px;border-radius:8px;border:1px solid var(--line);background:#fff;cursor:pointer}
-@media (max-width:640px){h1{font-size:15.5px}.card .v{font-size:16.5px}th,td{padding:6px 7px}}
-</style>
-</head>
-<body>
-<header>
-  <h1>Stockbee 动量爆发 · A股近三个月信号与前瞻收益</h1>
-  <div class="sub" id="meta">加载中…</div>
-</header>
-<div class="wrap">
-  <div class="cards" id="cards"></div>
-  <div class="panel">
-    <div class="row">
-      <input type="search" id="q" placeholder="搜索代码 / 名称">
-      <select id="from"></select>
-      <select id="to"></select>
-      <select id="rating">
-        <option value="">全部评级</option>
-        <option value="A">A（90+）</option>
-        <option value="A-">A-（80-89）</option>
-        <option value="B">B（70-79）</option>
-        <option value="Watch">Watch（55-69）</option>
-      </select>
-      <select id="minScore">
-        <option value="0">评分不限</option>
-        <option value="70">评分 ≥70</option>
-        <option value="80">评分 ≥80</option>
-        <option value="90">评分 ≥90</option>
-      </select>
-      <select id="complete">
-        <option value="">样本不限</option>
-        <option value="done">仅完整 5 日样本</option>
-        <option value="pending">仅待更新</option>
-      </select>
-      <button class="tab" id="compact">仅核心列</button>
-      <span class="muted" id="count"></span>
-    </div>
-    <div class="tabs" id="patterns"></div>
-  </div>
-  <div class="scroll">
-    <table id="tbl">
-      <thead></thead>
-      <tbody></tbody>
-    </table>
-  </div>
-  <button class="more" id="more">显示更多</button>
-  <div class="foot" id="foot"></div>
-</div>
-<script>
-(function(){
-  var PAYLOAD = null, ROWS = [], VIEW = [], PATTERN = '', SHOWN = 150, COMPACT = false;
-  var COLS = [
-    {k:'date',t:'日期',c:'c'},{k:'code',t:'代码',c:'c'},{k:'name',t:'名称',c:'l',sticky:1},
-    {k:'pattern',t:'形态',c:'l'},{k:'dayGain',t:'当日涨幅',p:1},{k:'t1',t:'T+1',p:1},{k:'t2',t:'T+2',p:1},
-    {k:'t3',t:'T+3',p:1},{k:'t4',t:'T+4',p:1},{k:'t5',t:'T+5',p:1},{k:'cum5',t:'5日累计',p:1,b:1},
-    {k:'winRate',t:'五日胜率',suf:'%'},{k:'score',t:'评分',b:1},{k:'rating',t:'评级',c:'c'},
-    {k:'close',t:'收盘价'},{k:'low',t:'止损参考'},{k:'riskPct',t:'风险',p:1,suf:'%'},
-    {k:'vr1',t:'量比(昨)',suf:'x'},{k:'vr20',t:'量比(20日)',suf:'x'},{k:'closeLoc',t:'收盘位置',p:1,suf:'%'},
-    {k:'baseDays',t:'基底天数'},{k:'baseWidth',t:'基底宽度',p:1,suf:'%'},{k:'volume',t:'成交量(手)'},{k:'gate',t:'市场闸门',c:'c'}
-  ];
-  var CORE = ['date','code','name','pattern','dayGain','t1','t2','t3','t4','t5','cum5','winRate','score'];
-  var SORT = { k:'date', dir:-1 };
-  var fmt = function(v, c){
-    if (v === null || v === undefined) return '<span class="muted">—</span>';
-    if (typeof v === 'number') {
-      var s = c.p ? v.toFixed(c.p) : String(v);
-      var cls = (c.b && v > 0) ? 'up' : (c.b && v < 0) ? 'down' : '';
-      return '<span class="' + cls + '">' + s + (c.suf || '') + '</span>';
-    }
-    return String(v);
-  };
-  function rcls(r){ return r === 'A' ? 'rA' : r === 'A-' ? 'rAm' : r === 'B' ? 'rB' : 'rW'; }
-  function render(){
-    var cols = COLS.filter(function(c){ return !COMPACT || CORE.indexOf(c.k) >= 0; });
-    var q = document.getElementById('q').value.trim().toLowerCase();
-    var from = document.getElementById('from').value, to = document.getElementById('to').value;
-    var rating = document.getElementById('rating').value, minScore = Number(document.getElementById('minScore').value) || 0;
-    var complete = document.getElementById('complete').value;
-    VIEW = ROWS.filter(function(r){
-      if (PATTERN && r.pattern !== PATTERN) return false;
-      if (complete === 'done' && !r.complete) return false;
-      if (complete === 'pending' && r.complete) return false;
-      if (from && r.date < from) return false;
-      if (to && r.date > to) return false;
-      if (rating && r.rating !== rating) return false;
-      if (r.score < minScore) return false;
-      if (q && (r.code + r.name).toLowerCase().indexOf(q) < 0) return false;
-      return true;
-    });
-    VIEW.sort(function(a,b){
-      var x = a[SORT.k], y = b[SORT.k];
-      if (x === null || x === undefined) return 1;
-      if (y === null || y === undefined) return -1;
-      if (typeof x === 'string') return SORT.dir * x.localeCompare(y);
-      return SORT.dir * (x - y);
-    });
-    var head = '<tr>' + cols.map(function(c){
-      var cls = c.c === 'l' ? 'l' : c.c === 'c' ? 'c' : '';
-      if (c.sticky) cls += ' name';
-      return '<th class="' + cls + '" data-k="' + c.k + '">' + c.t + (SORT.k === c.k ? (SORT.dir > 0 ? ' ▲' : ' ▼') : '') + '</th>';
-    }).join('') + '</tr>';
-    document.querySelector('#tbl thead').innerHTML = head;
-    var slice = VIEW.slice(0, SHOWN);
-    document.querySelector('#tbl tbody').innerHTML = slice.map(function(r){
-      return '<tr>' + cols.map(function(c){
-        var cls = c.c === 'l' ? 'l' : c.c === 'c' ? 'c' : '';
-        if (c.sticky) cls += ' name';
-        if (c.k === 'date') return '<td class="' + cls + '">' + r.date + (r.complete ? '' : ' <span class="tag rW">待更新</span>') + '</td>';
-        if (c.k === 'name') return '<td class="' + cls + '" title="基底 ' + r.baseDays + ' 天 / 宽 ' + r.baseWidth + '%">' + r.name + '</td>';
-        if (c.k === 'pattern') return '<td class="' + cls + '"><span class="tag">' + r.pattern + '</span></td>';
-        if (c.k === 'rating') return '<td class="' + cls + '"><span class="tag ' + rcls(r.rating) + '">' + r.rating + '</span></td>';
-        if (c.k === 'winRate') return '<td class="' + cls + '">' + (r.winRate === null ? '—' : r.winRate + '% <span class="muted">(' + r.winDays + '/' + r.haveDays + ')</span>') + '</td>';
-        return '<td class="' + cls + '">' + fmt(r[c.k], c) + '</td>';
-      }).join('') + '</tr>';
-    }).join('');
-    document.getElementById('count').textContent = '命中 ' + VIEW.length + ' 条 / 共 ' + ROWS.length + ' 条';
-    document.getElementById('more').style.display = VIEW.length > SHOWN ? 'block' : 'none';
-    document.getElementById('more').textContent = '显示更多（还有 ' + (VIEW.length - SHOWN) + ' 条）';
+function writePicksCsv(history) {
+  const head = ['日期', '排名', '代码', '名称', '所属板块', '综合分', '走势技术形态', '动量', '题材', '当日涨幅%', '5日累计%', '收盘涨停', '样本完整'];
+  const lines = [head.join(',')];
+  for (const r of history || []) {
+    lines.push([
+      r.date, r.rank, r.code, r.name, r.board, r.total, r.trend, r.mom, r.theme,
+      r.dayGain, r.cum5, r.limitUp ? '是' : '', r.complete ? '是' : '待更新',
+    ].map(csvCell).join(','));
   }
-  function init(){
-    var s = PAYLOAD.stats || {};
-    document.getElementById('meta').textContent = '数据更新：' + PAYLOAD.generatedAt + '　窗口：' + PAYLOAD.window.start + ' 起　最新交易日：' + PAYLOAD.lastCompleteDay + '　来源：' + PAYLOAD.source;
-    document.getElementById('cards').innerHTML = [
-      ['信号数', s.signals], ['涉及股票', s.stocks], ['完整5日样本', s.complete],
-      ['5日累计均值', (s.avg5 === null ? '—' : s.avg5 + '%')], ['5日中位数', (s.median5 === null ? '—' : s.median5 + '%')],
-      ['5日正收益率', (s.winRate5d === null ? '—' : s.winRate5d + '%')], ['单日胜率', (s.dayWinRate === null ? '—' : s.dayWinRate + '%')]
-    ].map(function(x){ return '<div class="card"><div class="k">' + x[0] + '</div><div class="v">' + (x[1] === undefined || x[1] === null ? '—' : x[1]) + '</div></div>'; }).join('');
-    var dates = Array.from(new Set(ROWS.map(function(r){ return r.date; }))).sort();
-    var fo = document.getElementById('from'), toSel = document.getElementById('to');
-    toSel.innerHTML = fo.innerHTML = '<option value="">全部日期</option>' + dates.map(function(d){ return '<option>' + d + '</option>'; }).join('');
-    var pats = Array.from(new Set(ROWS.map(function(r){ return r.pattern; })));
-    document.getElementById('patterns').innerHTML = '<span class="tab on" data-p="">全部形态</span>' + pats.map(function(p){ return '<span class="tab" data-p="' + p + '">' + p + '</span>'; }).join('');
-    document.getElementById('foot').innerHTML = (PAYLOAD.note || '') +
-      '<br>按形态统计：' + (s.patterns || []).map(function(p){ return p.pattern + ' ' + p.n + ' 条，5日正收益 ' + (p.winRate === null ? '—' : p.winRate + '%') + '，均值 ' + (p.avg5 === null ? '—' : p.avg5 + '%'); }).join('；') +
-      '<br>按评级统计：' + (s.ratings || []).map(function(p){ return p.rating + ' ' + p.n + ' 条，5日正收益 ' + (p.winRate === null ? '—' : p.winRate + '%') + '，均值 ' + (p.avg5 === null ? '—' : p.avg5 + '%'); }).join('；');
-    render();
-  }
-  document.querySelector('#tbl thead').addEventListener('click', function(e){
-    var th = e.target.closest('th'); if (!th) return;
-    var k = th.getAttribute('data-k');
-    if (SORT.k === k) SORT.dir = -SORT.dir; else { SORT.k = k; SORT.dir = -1; }
-    render();
-  });
-  document.getElementById('q').addEventListener('input', function(){ SHOWN = 150; render(); });
-  ['from','to','rating','minScore','complete'].forEach(function(id){ document.getElementById(id).addEventListener('change', function(){ SHOWN = 150; render(); }); });
-  document.getElementById('patterns').addEventListener('click', function(e){
-    var t = e.target.closest('.tab'); if (!t) return;
-    PATTERN = t.getAttribute('data-p'); SHOWN = 150;
-    Array.prototype.forEach.call(this.querySelectorAll('.tab'), function(x){ x.classList.toggle('on', x === t); });
-    render();
-  });
-  document.getElementById('more').addEventListener('click', function(){ SHOWN += 300; render(); });
-  document.getElementById('compact').addEventListener('click', function(){ COMPACT = !COMPACT; this.classList.toggle('on', COMPACT); render(); });
-  function load(){
-    fetch('stockbee.json').then(function(r){ return r.json(); }).then(function(j){
-      PAYLOAD = j; ROWS = j.rows || [];
-      if (!document.getElementById('cards').innerHTML) init(); else { SHOWN = Math.max(SHOWN, 150); render(); }
-      document.getElementById('meta').textContent = '数据更新：' + j.generatedAt + '　窗口：' + j.window.start + ' 起　最新交易日：' + j.lastCompleteDay + '　来源：' + j.source;
-    }).catch(function(){});
-  }
-  load();
-  setInterval(load, 600000);
-})();
-</script>
-</body>
-</html>`;
+  fs.mkdirSync(OUT_DIR, { recursive: true });
+  fs.writeFileSync(PICKS_CSV, '\ufeff' + lines.join('\n'), 'utf8');
 }
 
 /* ------------------------------------------------------------ main */
@@ -813,14 +858,17 @@ async function main() {
     // 除了「已覆盖最新交易日」，还要求上一轮抓取覆盖率足够（云端偶发限流会让覆盖率掉下来）
     const cov = (published && published.coverage) || {};
     const coverageOk = !cov.universe || (cov.barsOk || 0) >= cov.universe * 0.95;
-    if (published && published.lastCompleteDay === lastIdxDay && Array.isArray(published.rows) && coverageOk) {
-      log('  已发布数据已覆盖最新交易日 ' + lastIdxDay + '，跳过抓取，仅重新生成页面');
+    const picksReady = published && published.picks && Array.isArray(published.picks.rows) &&
+      published.picks.params && published.picks.params.maxPicks <= o.pickMax &&
+      published.picks.params.themeMode === (o.useTheme ? 'enabled' : 'disabled');
+    if (published && published.lastCompleteDay === lastIdxDay && Array.isArray(published.rows) && picksReady && coverageOk) {
+      log('  已发布数据已覆盖最新交易日 ' + lastIdxDay + ' 且精选结构完整，跳过抓取，仅重新生成页面');
       fs.mkdirSync(path.dirname(HTML_FILE), { recursive: true });
-      fs.writeFileSync(HTML_FILE, renderHtml(), 'utf8');
+      fs.writeFileSync(HTML_FILE, pageMod.renderHtml(), 'utf8');
       writeCsv(published.rows);
       return;
     }
-    if (published && published.lastCompleteDay === lastIdxDay && !coverageOk) {
+    if (published && published.lastCompleteDay === lastIdxDay && (!coverageOk || !picksReady)) {
       log('  上一轮覆盖率偏低（' + (cov.barsOk || 0) + '/' + (cov.universe || 0) + '），本轮重新抓取补齐');
     }
   }
@@ -836,6 +884,12 @@ async function main() {
   log('  股票池 ' + pool.key + '：' + universe.length + ' 只；窗口 ' + windowStart + ' ~ ' + lastIdxDay);
 
   const gateMap = buildGate(indexBars, lastIdxDay);
+  // 上证 20 日动量：算个股相对强度用（个股 20 日涨幅 - 指数 20 日涨幅）
+  const idxMom20 = new Map();
+  for (let i = 20; i < indexBars.length; i++) {
+    const prev = indexBars[i - 20].c;
+    if (prev > 0) idxMom20.set(indexBars[i].day, (indexBars[i].c / prev - 1) * 100);
+  }
   const fetched = await loadBarsMap(universe.map(function (s) { return s.code; }), o, log);
 
   const rows = [];
@@ -844,7 +898,7 @@ async function main() {
     const bars = fetched.bars.get(s.code);
     if (!bars || bars.length < 45) continue;
     scanned++;
-    for (const r of analyzeStock(s, bars, o, gateMap, windowStart)) {
+    for (const r of analyzeStock(s, bars, o, gateMap, windowStart, { idxMom20: idxMom20 })) {
       if (r.score < o.minScore) continue;
       if (o.require4pct && r.pattern.indexOf('4%突破') < 0) continue;
       rows.push(r);
@@ -859,38 +913,133 @@ async function main() {
   if (truncated) rows.length = o.maxRows;
 
   const stats = buildStats(rows);
+
+  /* ---- 精选：多因子（突破形态 / 走势技术形态 / 动量 / 题材热度 / 市场环境 / 风险）---- */
+  const pickOpts = Object.assign({}, picksMod.DEFAULTS, {
+    maxPicks: o.pickMax, preRank: o.preRank, minAmountYi: o.minAmountYi,
+    maxRiskPct: o.maxPickRisk, minScore: o.minScore,
+    themeMode: o.useTheme ? 'enabled' : 'disabled',
+  });
+  const panels = buildPanels(fetched.bars, windowStart, lastIdxDay);
+  const stage = pickStage1(rows, panels, gateMap, pickOpts);
+  let theme = null;
+  let themeNote = '';
+  if (o.useTheme) {
+    try {
+      // 题材热度是给「今日精选」服务的；历史回溯保留技术/动量筛选，但不为每个历史候选
+      // 重新请求所属板块，避免把 60 个交易日扩大成数千次外部请求。
+      const themeDay = stage.days[0] || lastIdxDay;
+      const latestCodes = (stage.stage.get(themeDay) || []).map(function (c) { return c.row.code; });
+      theme = await themeApi.loadTheme(latestCodes, { log: log, concurrency: 6 });
+      // 只有题材快照与精选日一致时才计入题材分；缓存落后/跨日时降级为中性，
+      // 防止把当日主题热度回填给旧交易日。
+      const snapDay = theme && theme.source === 'eastmoney' && theme.boards.size ? String((theme.at || '').slice(0, 10)) : '';
+      if (theme && snapDay && snapDay !== themeDay) {
+        theme.ok = false;
+        theme.error = '题材快照日期 ' + snapDay + ' 与候选日 ' + themeDay + ' 不一致';
+      }
+      if (!theme.ok) themeNote = theme.error ? ('题材数据不可用：' + theme.error) : '题材数据不足，本轮题材分按中性计';
+      else if (theme.fallback) themeNote = '东方财富板块接口不可用，题材归属/热度使用财联社快照回退；历史板块涨幅未补齐';
+    } catch (e) {
+      themeNote = '题材数据取数异常：' + String((e && e.message) || e);
+    }
+  } else {
+    themeNote = '本轮以 --no-theme 运行，题材分按中性计';
+  }
+  if (themeNote) log('  精选：' + themeNote);
+  const picksByDay = pickStage2(stage, theme, pickOpts);
+
+  // 基准 = 改造前口径：当天全部「4% 突破 + 评分≥70」信号，用于对比精选是否真的更好
+  const baseByDay = new Map();
+  for (const r of rows) {
+    if (r.score < o.minScore || r.pattern.indexOf('4%突破') < 0) continue;
+    if (!baseByDay.has(r.date)) baseByDay.set(r.date, []);
+    baseByDay.get(r.date).push(r);
+  }
+  const bt = picksBacktest(stage.days, picksByDay, baseByDay);
+  // 行情缓存可能暂时落后于指数最新交易日；精选页面跟随最近一个有完整候选的信号日，
+  // 同时保留 payload.lastCompleteDay 作为指数/扫描边界，避免页面无故显示 0 只。
+  const pickDay = stage.days[0] || lastIdxDay;
+  const latestPanel = panels.get(pickDay) || null;
+  const latestGate = gateMap.get(pickDay) || { score: 3, label: '中性' };
+  const latestPicks = picksByDay.get(pickDay) || [];
+  const pickHistory = [];
+  for (const day of stage.days) {
+    for (const p of (picksByDay.get(day) || [])) {
+      pickHistory.push({
+        date: p.date, rank: p.rank, code: p.code, name: p.name, board: p.board,
+        total: p.total, trend: p.trend, mom: p.mom, theme: p.theme, dayGain: p.dayGain,
+        cum5: p.cum5, complete: p.complete, limitUp: p.limitUp,
+      });
+    }
+  }
+  const picks = {
+    day: pickDay,
+    generatedAt: payloadTime(),
+    params: pickOpts,
+    market: latestPanel ? {
+      gate: latestGate.label, up: latestPanel.up, down: latestPanel.down, brk4: latestPanel.brk4,
+      upRatio: (latestPanel.up + latestPanel.down) ? Math.round((latestPanel.up / (latestPanel.up + latestPanel.down)) * 100) : null,
+    } : null,
+    theme: {
+      ok: !!(theme && theme.ok), source: theme ? theme.source : 'none', fallback: !!(theme && theme.fallback), boards: theme ? theme.boards.size : 0,
+      memberOk: theme ? theme.memberOk : 0, memberMiss: theme ? theme.memberMiss : 0,
+      boardHist: theme ? theme.histOk : 0, note: themeNote,
+    },
+    coverage: { days: stage.days.length, candidates: stage.codes.length },
+    factors: [
+      { name: '突破形态', max: 20, desc: '触发强度 / 前期基底 / 收盘位置 / 失败过滤' },
+      { name: '走势技术形态', max: 25, desc: '均线排列 / 趋势阶段 / MACD / RSI / 高位结构' },
+      { name: '动量大小', max: 25, desc: '当日涨幅 / 量能 / 20日与5日动量 / 距60日高点' },
+      { name: '题材热度', max: 20, desc: '所属板块当日涨幅（取最强板块）/ 板块近5日涨幅' },
+      { name: '市场环境', max: 5, desc: '上证 MA20/MA50 闸门 / 全市场上涨家数占比' },
+      { name: '风险可执行', max: 5, desc: '止损距离 / 成交额 / 收盘涨停扣分' },
+    ],
+    rows: latestPicks,
+    history: pickHistory,
+    backtest: bt,
+  };
+
   const payload = {
     version: 1,
     skill: 'stockbee-momentum-burst-screener',
-    generatedAt: new Date().toISOString().replace('T', ' ').slice(0, 19) + ' UTC',
-    source: '腾讯前复权日线(qfq) + 新浪兜底；市场闸门用上证指数',
+    generatedAt: payloadTime(),
+    source: '腾讯前复权日线(qfq) + 新浪兜底；市场闸门用上证指数；题材热度用东方财富板块行情与板块日线',
     window: { start: windowStart, end: lastIdxDay, months: o.months },
     lastCompleteDay: lastIdxDay,
     thresholds: {
       minPrice: o.minPrice, minVolumeShares: o.minVolume, fourPct: o.fourPct, dollar: o.dollar,
       maxRiskPct: o.maxRiskPct, minScore: o.minScore, maxBaseWidth: o.maxBaseWidth,
+      pickMax: o.pickMax, pickMinAmountYi: o.minAmountYi, pickMaxRiskPct: o.maxPickRisk,
     },
     coverage: { pool: pool.key, universe: universe.length, scanned: scanned, barsOk: fetched.bars.size, failed: fetched.failed },
     truncated: truncated,
     stats: stats,
-    note: '纳入标准：触发日含 4% 突破，且评分 ≥ ' + o.minScore + '（B 及以上）；已剔除 ST / *ST / 退市整理股，不含北交所。口径：以触发日收盘价为基准（T0 收盘 = 入场参考），T+N 为之后第 N 个交易日的单日涨幅，5日累计 = T+5 收盘 / T0 收盘 - 1；五日胜率 = 已实现交易日中收涨天数占比，标「待更新」的信号其后交易日尚未走完。价格为前复权，成交量按股计算、表中显示为手。仅为人工复核候选，不构成投资建议。',
+    picks: picks,
+    pickNote: pickNote(o, picks),
+    note: '原始信号口径：触发日含 4% 突破，且评分 ≥ ' + o.minScore + '（B 及以上）；已剔除 ST / *ST / 退市整理股，不含北交所。口径：以触发日收盘价为基准（T0 收盘 = 入场参考），T+N 为之后第 N 个交易日的单日涨幅，5日累计 = T+5 收盘 / T0 收盘 - 1；五日胜率 = 已实现交易日中收涨天数占比，标「待更新」的信号其后交易日尚未走完。价格为前复权，成交量按股计算、表中显示为手。仅为人工复核候选，不构成投资建议。',
     rows: rows,
   };
 
   writeJson(JSON_FILE, payload);
   writeJson(path.join(path.dirname(HTML_FILE), 'stockbee.json'), payload);
+  writeJson(PICKS_FILE, { version: 1, generatedAt: payload.generatedAt, day: pickDay, params: pickOpts, market: picks.market, theme: picks.theme, coverage: picks.coverage, rows: latestPicks, history: pickHistory, backtest: bt });
   writeCsv(rows);
+  writePicksCsv(pickHistory);
   fs.mkdirSync(path.dirname(HTML_FILE), { recursive: true });
-  fs.writeFileSync(HTML_FILE, renderHtml(), 'utf8');
+  fs.writeFileSync(HTML_FILE, pageMod.renderHtml(), 'utf8');
 
   log('  信号 ' + stats.signals + ' 条，涉及 ' + stats.stocks + ' 只；完整 5 日样本 ' + stats.complete);
   log('  5 日累计：均值 ' + stats.avg5 + '%，中位数 ' + stats.median5 + '%，正收益率 ' + stats.winRate5d + '%，单日胜率 ' + stats.dayWinRate + '%');
+  log('  精选 ' + lastIdxDay + '：' + latestPicks.length + ' 只（候选粗排 ' + stage.codes.length + ' 只 / ' + stage.days.length + ' 个交易日）');
+  log('  精选回溯（全体交易日）：' + (bt.picks ? bt.picks.n + ' 个样本，5日均值 ' + bt.picks.avg5 + '%，正收益 ' + bt.picks.winRate5d + '%' : '样本不足'));
+  log('  同窗口基准（全部信号）：' + (bt.baseline ? bt.baseline.n + ' 个样本，5日均值 ' + bt.baseline.avg5 + '%，正收益 ' + bt.baseline.winRate5d + '%' : '样本不足'));
   log('  输出：' + JSON_FILE);
   log('        ' + CSV_FILE);
+  log('        ' + PICKS_FILE);
   log('        ' + HTML_FILE);
   log('  总用时 ' + Math.round((Date.now() - t0) / 1000) + 's');
 }
-
 if (require.main === module) {
   main().catch(function (e) { console.error('ERROR: ' + ((e && e.stack) || e)); process.exit(1); });
 }

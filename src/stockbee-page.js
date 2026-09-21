@@ -175,9 +175,12 @@ tr:hover td.name{background:#fafbfc}
     }
     return String(v);
   }
+  function esc(v){
+    return String(v===null||v===undefined?'':v).replace(/[&<>"']/g,function(ch){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]; });
+  }
   function txUrl(code){ return 'https://gu.qq.com/'+encodeURIComponent(code||''); }
   function stockLink(code,name,title){
-    return '<a class="stock-link" href="'+txUrl(code)+'" target="_blank" rel="noopener noreferrer" title="'+(title||'在腾讯自选股查看行情与K线')+'">'+(name||code||'')+'</a>';
+    return '<a class="stock-link" href="'+txUrl(code)+'" target="_blank" rel="noopener noreferrer" title="'+esc(title||'在腾讯自选股查看行情与K线')+'">'+esc(name||code||'')+'</a>';
   }
   function rcls(r){ return r==='A'?'rA':r==='A-'?'rAm':r==='B'?'rB':'rW'; }
   function card(k,v){ return '<div class="card"><div class="k">'+k+'</div><div class="v">'+(v===null||v===undefined?'—':v)+'</div></div>'; }

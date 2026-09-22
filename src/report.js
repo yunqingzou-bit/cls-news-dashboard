@@ -322,13 +322,16 @@ function outlookHtml(card, opts) {
 let mkSeq = 0;
 function mkNextId() { mkSeq++; return "mk-sub-" + mkSeq; }
 
-/** 展开后的成分股列表（名称可点进东方财富看 K 线）。 */
+/** 展开后的关联股票列表（名称可点进腾讯行情看 K 线）。 */
 function subList(stocks, id) {
   if (!stocks || !stocks.length) return "";
   const rows = stocks.map(function (s) {
     return '<div class="mk-row mk-subrow">' +
-      '<a class="mk-link" href=' + Q + 'https://quote.eastmoney.com/' + encodeURIComponent(s.code) + '.html' + Q +
-      ' target=' + Q + '_blank' + Q + ' rel=' + Q + 'noopener noreferrer' + Q + '>' + esc(s.name) + '</a>' +
+     (s.code
+        ? ('<a class="mk-link" href=' + Q + 'https://gu.qq.com/' + encodeURIComponent(s.code) + Q +
+          ' target=' + Q + '_blank' + Q + ' rel=' + Q + 'noopener noreferrer' + Q + '>' + esc(s.name) + '</a>')
+        : '<span class="mk-k">' + esc(s.name) + '</span>') +
+      (s.n ? '<span class="mk-meta">' + s.n + ' 条</span>' : '') +
       '<span class="mk-p ' + mkCls(s.pct) + '">' + mkPct(s.pct) + '</span>' +
       (s.fundYi === undefined ? '' : '<span class="mk-fund">' + mkYi(s.fundYi) + '</span>') +
       '</div>';
@@ -467,6 +470,26 @@ function boardThemes(conclusion) {
 function boardPct(item) { return item.nn ? mkPct(item.sum / item.nn) : '—'; }
 function boardWin(item) { return item.nn ? Math.round(item.wins / item.nn * 100) + '%' : '—'; }
 
+/** 聚合项下的关联股票：按提及次数优先，平均涨幅次之。 */
+function boardRelatedStocks(item, limit) {
+  const rows = Array.from((item && item.stockMap) || new Map()).map(function (x) {
+    const s = x[1];
+    return {
+      code: s.code || '',
+      name: s.name || s.code || '',
+      n: s.n,
+      nn: s.nn,
+      sum: s.sum,
+      wins: s.wins,
+      pct: s.nn ? s.sum / s.nn : null,
+    };
+  });
+  rows.sort(function (a, b) {
+    return (b.n - a.n) || ((b.pct === null ? -999 : b.pct) - (a.pct === null ? -999 : a.pct)) || a.name.localeCompare(b.name);
+  });
+  return rows.slice(0, limit || 8);
+}
+
 /**
  * 新闻看板「个股表现」的候选池：把「新闻 × 股票」的记录聚合成每只股票的条数、平均涨幅、胜率。
  * 只做聚合不做排序——排序（按 5 日动能）在 src/cli.js 里用日线缓存算，看板与明细页共用同一份顺序。
@@ -499,13 +522,21 @@ function newsBoardHtml(rows, opts) {
     const v = Number(r.changePct);
     return r.changePct === null || r.changePct === undefined || !Number.isFinite(v) ? null : v;
   };
-  const bump = function (map, key, pct, code) {
+  const bump = function (map, key, pct, code, stockName) {
     if (!key) return;
-    if (!map.has(key)) map.set(key, { name: key, n: 0, nn: 0, sum: 0, wins: 0, stocks: new Set() });
+    if (!map.has(key)) map.set(key, { name: key, n: 0, nn: 0, sum: 0, wins: 0, stocks: new Set(), stockMap: new Map() });
     const a = map.get(key);
     a.n++;
     if (pct !== null) { a.nn++; a.sum += pct; if (pct > 0) a.wins++; }
     if (code) a.stocks.add(code);
+    const stockKey = code || stockName;
+    if (stockKey) {
+      if (!a.stockMap.has(stockKey)) a.stockMap.set(stockKey, { code: code || '', name: stockName || code || '', n: 0, nn: 0, sum: 0, wins: 0 });
+      const s = a.stockMap.get(stockKey);
+      if (!s.name && stockName) s.name = stockName;
+      s.n++;
+      if (pct !== null) { s.nn++; s.sum += pct; if (pct > 0) s.wins++; }
+    }
   };
   const topic = new Map();
   const column = new Map();
@@ -518,9 +549,10 @@ function newsBoardHtml(rows, opts) {
     const p = pctOf(r);
     if (p !== null) { nnAll++; sumAll += p; if (p > 0) winsAll++; }
     if (r.stockCode) codes.add(r.stockCode);
-    for (const t of boardThemes(r.researchConclusion)) bump(topic, t, p, r.stockCode);
-    bump(column, r.prefix, p, r.stockCode);
-    bump(stock, r.stockName || r.stock, p, r.stockCode);
+    const stockName = r.stockName || r.stock || '';
+    for (const t of boardThemes(r.researchConclusion)) bump(topic, t, p, r.stockCode, stockName);
+    bump(column, r.prefix, p, r.stockCode, stockName);
+    bump(stock, stockName, p, r.stockCode, stockName);
   }
   const byAvg = function (map, limit) {
     return Array.from(map.values())
@@ -550,29 +582,37 @@ function newsBoardHtml(rows, opts) {
       '<span class="mk-p ' + mkCls(item.nn ? item.sum / item.nn : 0) + '">' + boardPct(item) + '</span>' +
       '<span class="mk-fund">胜率 ' + boardWin(item) + '</span></div>';
   };
-  const stockLink = function (name) {
-    return esc(name);
-  };
   const topicRows = byCount(topic, 8).map(function (t, i) {
-    return cells(t, i, '<span class="mk-k">' + esc(t.name) + '</span>', t.n + ' 次 · ' + t.stocks.size + ' 只');
+    t.stocks = boardRelatedStocks(t, 8);
+    return groupRow(t, i, {
+      meta: t.n + ' 次 · ' + t.stockMap.size + ' 只',
+      tail: '<span class="mk-p ' + mkCls(t.nn ? t.sum / t.nn : 0) + '">' + boardPct(t) + '</span>' +
+        '<span class="mk-fund">胜率 ' + boardWin(t) + '</span>',
+    });
   }).join('');
   const columnRows = byAvg(column, 8).map(function (t, i) {
-    return cells(t, i, '<span class="mk-k">' + esc(t.name) + '</span>', t.n + ' 条');
+    t.stocks = boardRelatedStocks(t, 8);
+    return groupRow(t, i, {
+      meta: t.n + ' 条 · ' + t.stockMap.size + ' 只',
+      tail: '<span class="mk-p ' + mkCls(t.nn ? t.sum / t.nn : 0) + '">' + boardPct(t) + '</span>' +
+        '<span class="mk-fund">胜率 ' + boardWin(t) + '</span>',
+    });
   }).join('');
   const winRows = byWin(column, 8).map(function (t, i) {
     const rate = t.wins / t.nn;
-    return '<div class="mk-row"><span class="mk-rank' + (i < 3 ? ' top' : '') + '">' + (i + 1) + '</span>' +
-      '<span class="mk-k">' + esc(t.name) + '</span>' +
-      '<span class="mk-meta">' + t.n + ' 条</span>' +
-      '<span class="mk-p ' + mkCls(rate - 0.5) + '">胜率 ' + boardWin(t) + '</span>' +
-      '<span class="mk-fund">' + boardPct(t) + '</span></div>';
+    t.stocks = boardRelatedStocks(t, 8);
+    return groupRow(t, i, {
+      meta: t.n + ' 条 · ' + t.stockMap.size + ' 只',
+      tail: '<span class="mk-p ' + mkCls(rate - 0.5) + '">胜率 ' + boardWin(t) + '</span>' +
+        '<span class="mk-fund">' + boardPct(t) + '</span>',
+    });
   }).join('');
   // 看板与明细页共用 cli.js 传来的同一份「按动能排序」名单；没有传（如本地只导表）时退回按平均涨幅
   const useMomentum = !!(opts.boardStocks && opts.boardStocks.length);
   const stockRows = (useMomentum ? opts.boardStocks.slice(0, 8) : byAvg(stock, 8)).map(function (t, i) {
     const code = t.code || Array.from(t.stocks || [])[0] || '';
     const nameHtml = code
-      ? '<a class="mk-link" href=' + Q + 'https://quote.eastmoney.com/' + encodeURIComponent(code) + '.html' + Q +
+      ? '<a class="mk-link" href=' + Q + 'https://gu.qq.com/' + encodeURIComponent(code) + Q +
         ' target=' + Q + '_blank' + Q + ' rel=' + Q + 'noopener noreferrer' + Q + '>' + esc(t.name) + '</a>'
       : '<span class="mk-k">' + esc(t.name) + '</span>';
     if (!useMomentum) return cells(t, i, nameHtml, t.n + ' 条');

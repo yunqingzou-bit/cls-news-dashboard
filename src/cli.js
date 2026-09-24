@@ -176,6 +176,8 @@ function siteLinks() { return process.argv.includes('--site-links'); }
   }
   // 新闻看板「个股表现」：按 5 日动能排序（看板模块与明细页用同一份顺序）
   let boardStocks = [];
+  let boardNewStocks = [];
+  let boardNewMeta = { day: '', count: 0 };
   if (!process.argv.includes('--no-outlook')) {
     try {
       const techCache = technical.loadCache().stocks || {};
@@ -195,6 +197,42 @@ function siteLinks() { return process.argv.includes('--site-links'); }
           return (b.mom.score - a.mom.score) || (bv - av) || (b.n - a.n);
         })
         .slice(0, Math.max(1, Number((cfg.outlook && cfg.outlook.boardStocks) || 8)));
+      // 本轮新更新股票：取当前表格中最新新闻日，排除所有前缀/标题含“龙虎榜”的记录。
+      // 仍沿用同一批股票的 RSI/KDJ/MACD 动能分，避免“新更新”栏目与个股表现排序口径不一致。
+      const newsDay = function (r) {
+        const t = String((r && r.time) || '');
+        if (/^\d{4}-\d{2}-\d{2}/.test(t)) return t.slice(0, 10);
+        if (r && r.ctime) return cls.fmtTime(r.ctime).slice(0, 10);
+        return '';
+      };
+      const freshRows = rows.filter(function (r) {
+        return r && !/龙虎榜/.test(String(r.prefix || '') + ' ' + String(r.title || ''));
+      });
+      const freshDay = freshRows.reduce(function (max, r) {
+        const d = newsDay(r);
+        return d > max ? d : max;
+      }, '');
+      const freshMap = new Map();
+      freshRows.filter(function (r) { return newsDay(r) === freshDay; }).forEach(function (r) {
+        const code = r.stockCode || '';
+        const name = r.stockName || r.stock || '';
+        const key = code || name;
+        if (!key) return;
+        if (!freshMap.has(key)) freshMap.set(key, { code: code, name: name, n: 0, nn: 0, sum: 0, latestTime: r.time || '', mom: null });
+        const a = freshMap.get(key);
+        a.n++;
+        if (r.time && r.time > a.latestTime) a.latestTime = r.time;
+        const v = Number(r.changePct);
+        if (r.changePct !== null && r.changePct !== undefined && Number.isFinite(v)) { a.nn++; a.sum += v; }
+        const full = pool.find(function (s) { return s.code === code; });
+        if (full && full.mom) a.mom = full.mom;
+      });
+      boardNewStocks = Array.from(freshMap.values())
+        .filter(function (s) { return s.mom && s.mom.macd && s.mom.kdj && s.mom.score !== null && s.mom.score !== undefined; })
+        .map(function (s) { s.avgPct = s.nn ? s.sum / s.nn : null; return s; })
+        .sort(function (a, b) { return (b.mom.score - a.mom.score) || ((b.avgPct === null ? -999 : b.avgPct) - (a.avgPct === null ? -999 : a.avgPct)) || (b.n - a.n); })
+        .slice(0, Math.max(1, Number((cfg.outlook && cfg.outlook.boardNewStocks) || 12)));
+      boardNewMeta = { day: freshDay, count: boardNewStocks.length, sourceRows: freshRows.filter(function (r) { return newsDay(r) === freshDay; }).length };
       const bo = await outlook.runBoard(boardStocks, { config: cfg, newsRows: rows, siteLinks: siteLinks(), backHref: siteLinks() ? '../' : '' });
       console.log('新闻看板个股：动能排序 ' + boardStocks.length + ' 只（池 ' + pool.length + ' 只，指标齐全 ' +
         pool.filter(function (s) { return s.mom && s.mom.macd && s.mom.kdj; }).length + ' 只，首位 ' +
@@ -215,6 +253,8 @@ function siteLinks() { return process.argv.includes('--site-links'); }
     outlookHref: siteLinks() ? 'outlook/' : '',
     boardHref: siteLinks() ? 'stocks/' : '',
     boardStocks: boardStocks,
+    boardNewStocks: boardNewStocks,
+    boardNewMeta: boardNewMeta,
   });
   const selected20 = top20.write(rows, meta, {
     days: Math.min(days, 3),

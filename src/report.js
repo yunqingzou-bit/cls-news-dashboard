@@ -607,6 +607,27 @@ function newsBoardHtml(rows, opts) {
         '<span class="mk-fund">' + boardPct(t) + '</span>',
     });
   }).join('');
+  const newStockRows = (opts.boardNewStocks || []).slice(0, 12).map(function (t, i) {
+    const score = t.mom && t.mom.score !== undefined && t.mom.score !== null ? t.mom.score : null;
+    const code = t.code || '';
+    const nameHtml = code
+      ? '<a class="mk-link" href=' + Q + 'https://gu.qq.com/' + encodeURIComponent(code) + Q +
+        ' target=' + Q + '_blank' + Q + ' rel=' + Q + 'noopener noreferrer' + Q + '>' + esc(t.name) + '</a>'
+      : '<span class="mk-k">' + esc(t.name) + '</span>';
+    const avg = t.avgPct === null || t.avgPct === undefined ? '—' : mkPct(t.avgPct);
+    const time = t.latestTime ? String(t.latestTime).slice(11, 16) : '';
+    const momHtml = score === null
+      ? '<span class="mk-p" title="RSI / KDJ / MACD 数据不足">动能 —</span>'
+      : '<span class="mk-p ' + mkCls(score - 50) + '" title=' + Q + esc(momentumText(t.mom)) + Q + '>动能 ' + score + '</span>';
+    return '<div class="mk-row"><span class="mk-rank' + (i < 3 ? ' top' : '') + '">' + (i + 1) + '</span>' +
+      nameHtml +
+      '<span class="mk-meta">' + (time ? time + ' · ' : '') + t.n + ' 条</span>' +
+      momHtml +
+      '<span class="mk-fund">新闻日均 ' + avg + '</span></div>';
+  }).join('');
+  const newMeta = opts.boardNewMeta || {};
+  const newTitle = '本轮新更新股票（排除龙虎榜，按动能排序）' + (newMeta.day ? ' · ' + newMeta.day : '');
+  const newBody = newStockRows || '<div class="mkt-note">本轮暂无满足条件的新更新股票。</div>';
   // 看板与明细页共用 cli.js 传来的同一份「按动能排序」名单；没有传（如本地只导表）时退回按平均涨幅
   const useMomentum = !!(opts.boardStocks && opts.boardStocks.length);
   const stockRows = (useMomentum ? opts.boardStocks.slice(0, 8) : byAvg(stock, 8)).map(function (t, i) {
@@ -646,6 +667,8 @@ function newsBoardHtml(rows, opts) {
     '<div class="mkt-box"><div class="mkt-h">最热题材 / 板块（按提及次数）</div><div class="mkt-list">' + topicRows + '</div></div>',
     '<div class="mkt-box"><div class="mkt-h">各栏目表现（按平均涨幅）</div><div class="mkt-list">' + columnRows + '</div></div>',
     '<div class="mkt-box"><div class="mkt-h">各栏目胜率（样本 ≥ 2 条）</div><div class="mkt-list">' + winRows + '</div></div>',
+    '<div class="mkt-box mkt-wide"><div class="mkt-h">' + esc(newTitle) + '</div><div class="mkt-list">' + newBody + '</div>' +
+      '<div class="mkt-note">新更新口径：取当前表格中最新新闻日的股票记录；所有前缀或标题含“龙虎榜”的记录已排除。共 ' + (newMeta.count || 0) + ' 只，动能分为 RSI(14)×30% + KDJ(9,3,3)×30% + MACD(12,26,9)×40%。</div></div>',
     '<div class="mkt-box"><div class="mkt-h">个股表现（' + (useMomentum ? '按动能排序' : '按平均涨幅') + '）' +
       (opts.boardHref
         ? ' <a href=' + Q + esc(opts.boardHref) + Q + ' title=' + Q + '按添加日期查看这些个股的当日与 T+1~T+5 表现' + Q +
@@ -1089,6 +1112,7 @@ function writeCardsVariant(rows, meta, opts, base) {
   fs.writeFileSync(p, toHtml(rows, meta, {
     layout: 'cards', links: opts.cardsLinks || [], outlookHref: outlookHref,
     boardHref: boardHref, boardStocks: opts.boardStocks,
+    boardNewStocks: opts.boardNewStocks, boardNewMeta: opts.boardNewMeta,
   }), 'utf8');
   return p;
 }

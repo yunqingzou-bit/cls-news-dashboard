@@ -626,7 +626,7 @@ function newsBoardHtml(rows, opts) {
       '<span class="mk-fund">新闻日均 ' + avg + '</span></div>';
   }).join('');
   const newMeta = opts.boardNewMeta || {};
-  const newTitle = '本轮新更新股票（排除龙虎榜，按动能排序）' + (newMeta.day ? ' · ' + newMeta.day : '');
+  const newTitle = '实时更新股票（排除龙虎榜，按动能排序）' + (newMeta.day ? ' · ' + newMeta.day : '');
   const newBody = newStockRows || '<div class="mkt-note">本轮暂无满足条件的新更新股票。</div>';
   // 看板与明细页共用 cli.js 传来的同一份「按动能排序」名单；没有传（如本地只导表）时退回按平均涨幅
   const useMomentum = !!(opts.boardStocks && opts.boardStocks.length);
@@ -668,7 +668,7 @@ function newsBoardHtml(rows, opts) {
     '<div class="mkt-box"><div class="mkt-h">各栏目表现（按平均涨幅）</div><div class="mkt-list">' + columnRows + '</div></div>',
     '<div class="mkt-box"><div class="mkt-h">各栏目胜率（样本 ≥ 2 条）</div><div class="mkt-list">' + winRows + '</div></div>',
     '<div class="mkt-box mkt-wide"><div class="mkt-h">' + esc(newTitle) + '</div><div class="mkt-list">' + newBody + '</div>' +
-      '<div class="mkt-note">新更新口径：取当前表格中最新新闻日的股票记录；所有前缀或标题含“龙虎榜”的记录已排除。共 ' + (newMeta.count || 0) + ' 只，动能分为 RSI(14)×30% + KDJ(9,3,3)×30% + MACD(12,26,9)×40%。</div></div>',
+      '<div class="mkt-note">实时口径：随每轮新闻抓取和页面发布重算；本轮更新于 ' + esc(newMeta.updatedAt || '—') + '。取当前表格中最新新闻日的股票记录；所有前缀或标题含“龙虎榜”的记录已排除。共 ' + (newMeta.count || 0) + ' 只，动能分为 RSI(14)×30% + KDJ(9,3,3)×30% + MACD(12,26,9)×40%。</div></div>',
     '<div class="mkt-box"><div class="mkt-h">个股表现（' + (useMomentum ? '按动能排序' : '按平均涨幅') + '）' +
       (opts.boardHref
         ? ' <a href=' + Q + esc(opts.boardHref) + Q + ' title=' + Q + '按添加日期查看这些个股的当日与 T+1~T+5 表现' + Q +

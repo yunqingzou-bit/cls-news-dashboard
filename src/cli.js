@@ -177,7 +177,7 @@ function siteLinks() { return process.argv.includes('--site-links'); }
   // 新闻看板「个股表现」：按 5 日动能排序（看板模块与明细页用同一份顺序）
   let boardStocks = [];
   let boardNewStocks = [];
-  let boardNewMeta = { day: '', count: 0 };
+  let boardNewMeta = { day: '', count: 0, updatedAt: '' };
   if (!process.argv.includes('--no-outlook')) {
     try {
       const techCache = technical.loadCache().stocks || {};
@@ -232,7 +232,12 @@ function siteLinks() { return process.argv.includes('--site-links'); }
         .map(function (s) { s.avgPct = s.nn ? s.sum / s.nn : null; return s; })
         .sort(function (a, b) { return (b.mom.score - a.mom.score) || ((b.avgPct === null ? -999 : b.avgPct) - (a.avgPct === null ? -999 : a.avgPct)) || (b.n - a.n); })
         .slice(0, Math.max(1, Number((cfg.outlook && cfg.outlook.boardNewStocks) || 12)));
-      boardNewMeta = { day: freshDay, count: boardNewStocks.length, sourceRows: freshRows.filter(function (r) { return newsDay(r) === freshDay; }).length };
+      boardNewMeta = {
+        day: freshDay,
+        count: boardNewStocks.length,
+        sourceRows: freshRows.filter(function (r) { return newsDay(r) === freshDay; }).length,
+        updatedAt: new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false }),
+      };
       const bo = await outlook.runBoard(boardStocks, { config: cfg, newsRows: rows, siteLinks: siteLinks(), backHref: siteLinks() ? '../' : '' });
       console.log('新闻看板个股：动能排序 ' + boardStocks.length + ' 只（池 ' + pool.length + ' 只，指标齐全 ' +
         pool.filter(function (s) { return s.mom && s.mom.macd && s.mom.kdj; }).length + ' 只，首位 ' +

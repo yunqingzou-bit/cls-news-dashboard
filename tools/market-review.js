@@ -93,7 +93,7 @@ function crossChecks(card) {
   else if (Number(b.limitUp) > 0) result.push('涨停数量高于零，但涨停家数本身不代表封板质量；当前数据未包含炸板率及连板结构。');
   return result;
 }
-function makeReport(stage, card, date, hm, news, prior, referenceDate) {
+function makeReport(stage, card, date, hm, news, prior, referenceDate, newsSources) {
   const b = card.breadth || {}, ix = card.indexes || [], mood = tone(card);
   const sectors = ((card.outlook && card.outlook.sectors && card.outlook.sectors.length) ? card.outlook.sectors : card.themes || []).slice(0, 6);
   const delta = stage === 'noon' ? comparison(card, prior.morning, '对比10点')
@@ -127,7 +127,8 @@ function makeReport(stage, card, date, hm, news, prior, referenceDate) {
     stage: stage, capturedAt: date + ' ' + hm, marketTime: card.updatedText || '—', referenceDate: referenceDate || '', tone: mood, conclusion: conclusion,
     metrics: metrics, indexes: ix.map(function (x) { return { name: x.name, code: x.code, px: Number(x.px), pct: Number(x.pct) }; }),
     sectors: sectors, leaders: (card.hotGain || []).slice(0, 5), funds: (card.hotFund || []).slice(0, 5),
-    comparison: delta, crossChecks: crossChecks(card), follow: follow, headlines: stage === 'premarket' ? news : [], snapshot: compact(card),
+    comparison: delta, crossChecks: crossChecks(card), follow: follow, headlines: stage === 'premarket' ? news : [],
+    newsUpdatedAt: stage === 'premarket' ? date + ' ' + hm : '', newsSources: stage === 'premarket' ? (newsSources || []) : [], snapshot: compact(card),
   };
 }
 function pageHtml(data) {
@@ -151,7 +152,8 @@ function pageHtml(data) {
     const metrics = (r.metrics || []).map(function (m) { return '<div class="metric"><span>' + esc(m.label) + '</span><b>' + esc(m.value) + '</b></div>'; }).join('');
     const compare = r.comparison ? '<p class="compare"><b>' + esc(r.comparison.label) + '变化：</b>上涨家数 ' + signed(r.comparison.up, 0) + '、下跌家数 ' + signed(r.comparison.down, 0) + '、资金变化 ' + signed(r.comparison.fundYi, 1) + '亿元、涨停变化 ' + signed(r.comparison.limitUp, 0) + '、跌停变化 ' + signed(r.comparison.limitDown, 0) + '。</p>' : '';
     const checks = '<h3>多维信号互证与分歧</h3><ul class="checks">' + (r.crossChecks || []).map(function (v) { return '<li>' + esc(v) + '</li>'; }).join('') + '</ul>';
-    const news = r.headlines && r.headlines.length ? '<h3>盘前多来源新闻线索</h3><ul class="news">' + r.headlines.map(function (n) { return '<li><time>' + esc(n.time) + '</time><span class="source-tag">' + esc(n.source) + '</span>' + (n.prefix ? '<span class="tag">' + esc(n.prefix) + '</span>' : '') + '<a href="' + esc(n.url) + '" target="_blank" rel="noopener noreferrer">' + esc(n.title) + '</a></li>'; }).join('') + '</ul>' : '<p class="notice">当前没有匹配时段的可用新闻标题；行情复盘仍按已获取的市场数据生成。</p>';
+    const sourceStatus = r.newsSources && r.newsSources.length ? '<p class="meta">新闻采集状态（' + esc(r.newsUpdatedAt || '—') + '）：' + r.newsSources.map(function (s) { return esc(s.name) + ' ' + (s.ok ? '可用' : '暂不可用，沿用缓存') + '（' + esc(s.count || 0) + '条）'; }).join(' · ') + '</p>' : '';
+    const news = '<h3>盘前多来源新闻线索</h3>' + sourceStatus + (r.headlines && r.headlines.length ? '<ul class="news">' + r.headlines.map(function (n) { return '<li><time>' + esc(n.time) + '</time><span class="source-tag">' + esc(n.source) + '</span>' + (n.prefix ? '<span class="tag">' + esc(n.prefix) + '</span>' : '') + '<a href="' + esc(n.url) + '" target="_blank" rel="noopener noreferrer">' + esc(n.title) + '</a></li>'; }).join('') + '</ul>' : '<p class="notice">当前没有匹配时段的可用新闻标题；行情复盘仍按已获取的市场数据生成。</p>');
     return '<section id="' + key + '"><div class="head"><div><h2>' + esc(label) + '</h2><div class="meta">生成于 ' + esc(r.capturedAt) + ' · 行情截点 ' + esc(r.marketTime) + (r.referenceDate ? ' · 盘前行情日 ' + esc(r.referenceDate) : '') + '</div></div><span class="state ' + ((r.tone === '偏强' || r.tone === '震荡偏强') ? 'positive' : (r.tone === '偏弱' || r.tone === '震荡偏弱') ? 'negative' : '') + '">' + esc(r.tone) + '</span></div><p class="lead">' + esc(r.conclusion) + '</p><div class="metrics">' + metrics + '</div>' + compare + '<h3>指数表现</h3><div class="scroll"><table><thead><tr><th>指数</th><th>点位</th><th>涨跌幅</th>' + (r.comparison ? '<th>较前一时段</th>' : '') + '</tr></thead><tbody>' + indexRows + '</tbody></table></div><h3>强势题材 / 板块</h3><div class="scroll"><table><thead><tr><th>方向</th><th>样本数</th><th>平均涨幅</th><th>上涨占比</th><th>主力净流入</th></tr></thead><tbody>' + (sectorRows || '<tr><td colspan="5">暂无足够的板块数据</td></tr>') + '</tbody></table></div><div class="twocol"><div><h3>涨幅靠前</h3><div class="scroll"><table><thead><tr><th>股票</th><th>涨幅</th></tr></thead><tbody>' + rows(r.leaders, 'gain') + '</tbody></table></div></div><div><h3>主力净流入靠前</h3><div class="scroll"><table><thead><tr><th>股票</th><th>涨幅</th><th>净流入</th></tr></thead><tbody>' + rows(r.funds, 'fund') + '</tbody></table></div></div></div>' + checks + news + '<h3>后续观察</h3><ul>' + (r.follow || []).map(function (v) { return '<li>' + esc(v) + '</li>'; }).join('') + '</ul></section>';
   };
   const holiday = day.isTradingDay === false ? '<p class="notice">' + esc(data.today) + ' 经行情日历校验为非交易日，因此今天没有盘中复盘。</p>' : '';
@@ -172,21 +174,30 @@ async function update() {
   const day = data.days[p.date] || { date: p.date, reports: {} };
   day.reports = day.reports || {};
   const stage = stageAt(p);
+  const newsDoc = readJson(NEWS, { rows: [], sources: [] });
+  const fallbackNews = readJson(CLS_NEWS, { rows: [] });
+  const newsRows = newsDoc.rows && newsDoc.rows.length ? newsDoc.rows : fallbackNews.rows;
+  const newsSources = (newsDoc.sources || []).map(function (s) { return { name: s.name, ok: !!s.ok, count: Number(s.count) || 0 }; });
   if (stage && !day.reports[stage]) {
     const bars = await quotes.dailyBars('sh000001', 5);
     const keys = Array.from(bars.keys()).sort();
     const todayHasBar = keys.length > 0 && keys[keys.length - 1] === p.date.replace(/-/g, '');
     const isTrading = stage === 'premarket' || todayHasBar;
     if (isTrading) {
-      const n = readJson(NEWS, { rows: [] });
-      const fallbackNews = readJson(CLS_NEWS, { rows: [] });
       const referenceDate = !todayHasBar && keys.length ? keys[keys.length - 1].slice(0, 4) + '-' + keys[keys.length - 1].slice(4, 6) + '-' + keys[keys.length - 1].slice(6, 8) : '';
-      day.reports[stage] = makeReport(stage, compact(card), p.date, p.hm, headlines((n.rows && n.rows.length ? n.rows : fallbackNews.rows), p.date, p.hm), day.reports, stage === 'premarket' ? referenceDate : '');
+      day.reports[stage] = makeReport(stage, compact(card), p.date, p.hm, headlines(newsRows, p.date, p.hm), day.reports, stage === 'premarket' ? referenceDate : '', newsSources);
       day.isTradingDay = true;
     } else {
       day.isTradingDay = false;
       day.reports = {};
     }
+    day.updatedAt = p.date + ' ' + p.hm;
+  }
+  // 同一日盘前时段允许刷新新闻列表和来源状态，但冻结已记录的市场快照，避免把盘前变成另一时点行情。
+  if (stage === 'premarket' && day.reports.premarket) {
+    day.reports.premarket.headlines = headlines(newsRows, p.date, p.hm);
+    day.reports.premarket.newsUpdatedAt = p.date + ' ' + p.hm;
+    day.reports.premarket.newsSources = newsSources;
     day.updatedAt = p.date + ' ' + p.hm;
   }
   data.days[p.date] = day;

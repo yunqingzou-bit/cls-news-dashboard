@@ -857,15 +857,20 @@ function toHtml(rows, meta, opts) {
       '<td class=' + Q + 'tech' + Q + ' data-label=' + Q + '技术面结论' + Q + '>' + technicalHtml(r.technicalConclusion) + '</td>' +
       '</tr>';
   };
-  // 移动端内嵌浏览器对长正文 + 多列大表的初始 DOM 很敏感：先只放首屏行，
-  // 其余行保存在脚本字符串里，用户点击后再插入。数据不丢，只降低首屏渲染峰值。
+  // 只把首批行放进 DOM；完整行数据留给客户端分页、搜索、筛选和排序。
   const initialLimit = layout === 'cards' ? 40 : 60;
   const rowHtmlList = rows.map(rowHtml);
   const body = rowHtmlList.slice(0, initialLimit).join('\n');
-  const deferredParts = [];
-  for (let i = initialLimit; i < rowHtmlList.length; i += initialLimit) {
-    deferredParts.push(rowHtmlList.slice(i, i + initialLimit).join('\n'));
-  }
+  const clientRows = rows.map(function (r, i) {
+    return {
+      h: rowHtmlList[i], p: String(r.prefix || ''), d: String(r.time || '').slice(0, 10),
+      b: playFrom(r.researchConclusion), g: trendFrom(r.technicalConclusion),
+      t: r.turnover === null || r.turnover === undefined ? null : Number(r.turnover),
+      v: r.volRatioPct === null || r.volRatioPct === undefined ? null : Number(r.volRatioPct),
+      // 正文虽不显示为单独一列，仍保留在搜索范围内。
+      x: String(r.text || ''),
+    };
+  });
   const filterOptionMap = {};
   ['data-prefix', 'data-date', 'data-play', 'data-trend'].forEach(function (attr) {
     const counts = {};
@@ -892,25 +897,24 @@ function toHtml(rows, meta, opts) {
   ].join('');
   const script = '<script>' + `
 (function(){
-  var rows = [].slice.call(document.querySelectorAll('tbody tr'));
-  var totalRows = ${rows.length};
-  var deferredParts = ${JSON.stringify(deferredParts)};
-  var allLoaded = !deferredParts.length;
+  var allRows = ${JSON.stringify(clientRows)};
+  var totalRows = allRows.length;
+  var pageSize = ${initialLimit};
+  var shown = 0;
+  var matches = allRows;
+  var tbody = document.querySelector('tbody');
   var loadMore = document.getElementById('loadMore');
-  function ensureAll(){
-    if (allLoaded) return;
-    var bodyEl = document.querySelector('tbody');
-    var nextPart = deferredParts.shift();
-    if (bodyEl && nextPart) bodyEl.insertAdjacentHTML('beforeend', nextPart);
-    allLoaded = !deferredParts.length;
-    rows = [].slice.call(document.querySelectorAll('tbody tr'));
-    searchText = null;
+  function showNext(){
+    var next = matches.slice(shown, shown + pageSize);
+    if (next.length) tbody.insertAdjacentHTML('beforeend', next.map(function (r) { return r.h; }).join(''));
+    shown += next.length;
     if (loadMore) {
-      if (allLoaded) loadMore.remove();
-      else loadMore.textContent = '继续加载下一批（剩余 ' + (totalRows - rows.length) + ' 条）';
+      loadMore.hidden = shown >= matches.length;
+      loadMore.textContent = '加载下一批（剩余 ' + (matches.length - shown) + ' 条）';
     }
+    updateCount();
   }
-  if (loadMore) loadMore.addEventListener('click', ensureAll);
+  if (loadMore) loadMore.addEventListener('click', showNext);
   var q = document.getElementById('q');
   var cnt = document.getElementById('cnt');
   var hint = document.getElementById('hint');
@@ -919,17 +923,15 @@ function toHtml(rows, meta, opts) {
     hint.style.display = 'block';
   }
   ${phoneHook}
-  if (!rows.length || !q) return;
+  if (!allRows.length || !q) return;
   var initialQuery = new URLSearchParams(location.search).get('q');
   if (initialQuery) q.value = initialQuery;
-  // 行内可搜索文本：排序会改 DOM 顺序，所以用 Map 与行一一对应；改成第一次搜索时才建，
-  // 省掉加载时对几百行长文本的一整趟扫描
-  var searchText = null;
-  function textCache() {
-    if (searchText) return searchText;
-    searchText = new Map();
-    rows.forEach(function (r) { searchText.set(r, (r.textContent || '').toLowerCase()); });
-    return searchText;
+  function searchable(r) {
+    if (!r.s) r.s = (r.h.replace(/<[^>]*>/g, ' ') + ' ' + r.x).toLowerCase();
+    return r.s;
+  }
+  function updateCount() {
+    cnt.textContent = '显示 ' + shown + ' / 匹配 ' + matches.length + ' / 总计 ' + totalRows + ' 条';
   }
   // 多选筛选：每个筛选器是一个复选下拉，可以同时勾多个值；不勾 = 该项不过滤
   function closeAll() {
@@ -945,8 +947,8 @@ function toHtml(rows, meta, opts) {
     if (rawOptions) {
       try { counts = JSON.parse(rawOptions) || {}; list = Object.keys(counts); } catch (e) {}
     }
-    if (!list.length) rows.forEach(function (r) {
-      var v = r.getAttribute(attr) || '';
+    if (!list.length) allRows.forEach(function (r) {
+      var v = attr === 'data-prefix' ? r.p : attr === 'data-date' ? r.d : attr === 'data-play' ? r.b : r.g;
       if (!v) return;
       if (counts[v] === undefined) { counts[v] = 0; list.push(v); }
       counts[v]++;
@@ -991,7 +993,6 @@ function toHtml(rows, meta, opts) {
       else btn.textContent = picked[0] + '、' + picked[1] + ' 等 ' + picked.length + ' 项';
     }
     function setAll(on) {
-      ensureAll();
       Object.keys(boxes).forEach(function (v) {
         boxes[v].checked = on;
         if (on) state.sel[v] = 1; else delete state.sel[v];
@@ -1013,7 +1014,6 @@ function toHtml(rows, meta, opts) {
       pop.appendChild(item);
       boxes[v] = cb;
       cb.addEventListener('change', function () {
-        ensureAll();
         if (cb.checked) state.sel[v] = 1; else delete state.sel[v];
         state.active = Object.keys(state.sel).length;
         refreshLabel();
@@ -1042,60 +1042,52 @@ function toHtml(rows, meta, opts) {
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeAll(); });
   function apply() {
     var kw = q.value.trim().toLowerCase();
-    var cache = kw ? textCache() : null;
-    var n = 0;
-    for (var i = 0; i < rows.length; i++) {
-      var el = rows[i];
+    matches = allRows.filter(function (r) {
       var ok = true;
       for (var f = 0; f < filters.length; f++) {
         var obj = filters[f];
         if (!obj.active) continue;
-        if (obj.sel[el.getAttribute(obj.attr) || ''] !== 1) { ok = false; break; }
+        var val = obj.attr === 'data-prefix' ? r.p : obj.attr === 'data-date' ? r.d : obj.attr === 'data-play' ? r.b : r.g;
+        if (obj.sel[val || ''] !== 1) { ok = false; break; }
       }
-      if (ok && kw) ok = (cache.get(el) || '').indexOf(kw) > -1;
-      // 只在显示状态真的要变时才写 style：初次渲染和反复筛选时能省掉几百次无意义的样式写入与重排
-      var want = ok ? '' : 'none';
-      if (el.style.display !== want) el.style.display = want;
-      if (ok) n++;
-    }
-    cnt.textContent = '显示 ' + n + ' / ' + totalRows + ' 条' + (allLoaded ? '' : '（点击加载下一批）');
+      return ok && (!kw || searchable(r).indexOf(kw) > -1);
+    });
+    if (sortKey) sortRows(sortKey, sortDir);
+    tbody.innerHTML = '';
+    shown = 0;
+    showNext();
   }
   // 输入时别每敲一个字就全表扫描（几百行 × 长结论文字）：停 140ms 再过滤
   var searchTimer = null;
   q.addEventListener('input', function () {
-    ensureAll();
     if (searchTimer) clearTimeout(searchTimer);
     searchTimer = setTimeout(apply, 140);
   });
   // 表头点击排序：换手率 / 量较前日；空值恒排最后
   var sortKey = null;
   var sortDir = -1;
-  var tbody = rows[0].parentNode;
   var ths = document.querySelectorAll('th[data-sort]');
   function sortRows(key, dir) {
-    rows.sort(function (a, b) {
-      var av = parseFloat(a.getAttribute(key));
-      var bv = parseFloat(b.getAttribute(key));
-      var an = isFinite(av);
-      var bn = isFinite(bv);
+    matches.sort(function (a, b) {
+      var av = key === 'data-turn' ? a.t : a.v;
+      var bv = key === 'data-turn' ? b.t : b.v;
+      var an = av !== null && isFinite(av);
+      var bn = bv !== null && isFinite(bv);
       if (!an && !bn) return 0;
       if (!an) return 1;
       if (!bn) return -1;
       return (av - bv) * dir;
     });
-    rows.forEach(function (r) { tbody.appendChild(r); });
-    apply();
   }
   for (var t = 0; t < ths.length; t++) {
     (function (th) {
       th.addEventListener('click', function () {
-        ensureAll();
         var key = th.getAttribute('data-sort');
         sortDir = (sortKey === key && sortDir === -1) ? 1 : -1;
         sortKey = key;
         for (var j = 0; j < ths.length; j++) ths[j].classList.remove('sorted', 'sorted-asc');
         th.classList.add(sortDir === 1 ? 'sorted-asc' : 'sorted');
-        sortRows(key, sortDir);
+        apply();
       });
     })(ths[t]);
   }
@@ -1117,7 +1109,7 @@ function toHtml(rows, meta, opts) {
     '<div class=' + Q + 'tw' + Q + '><table>' + colgroup + '<thead><tr>' + th + '</tr></thead><tbody>',
     body,
     '</tbody></table></div>',
-    deferredParts.length ? '<button id=' + Q + 'loadMore' + Q + ' class=' + Q + 'load-more' + Q + ' type=' + Q + 'button' + Q + '>加载下一批 ' + Math.min(initialLimit, rows.length - initialLimit) + ' 条（剩余 ' + (rows.length - initialLimit) + ' 条）</button>' : '',
+    rows.length > initialLimit ? '<button id=' + Q + 'loadMore' + Q + ' class=' + Q + 'load-more' + Q + ' type=' + Q + 'button' + Q + '>加载下一批（剩余 ' + (rows.length - initialLimit) + ' 条）</button>' : '',
     script,
     CARD_SCRIPT,
     '</body></html>',

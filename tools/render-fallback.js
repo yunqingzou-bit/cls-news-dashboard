@@ -1,4 +1,5 @@
 const fs = require('node:fs');
+const path = require('node:path');
 const report = require('../src/report.js');
 
 const source = 'out/previous-news.json';
@@ -20,4 +21,14 @@ const out = report.exportAll(payload.rows, payload.meta, {
   boardHref: 'stocks/',
   starsHref: 'stars.json',
 });
+const publishedAt = Date.now();
+fs.writeFileSync(path.join(report.OUT_DIR, 'status.json'), JSON.stringify({
+  publishedAt,
+  publishedAtShanghai: new Date(publishedAt).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false }),
+  range: payload.meta.range,
+  poolLabel: payload.meta.poolLabel,
+  days: 7,
+  rows: payload.rows.length,
+  source: 'cached-news',
+}, null, 2), 'utf8');
 console.log('兜底渲染完成：' + out.htmlPath + ' ｜ ' + out.cardsPath);

@@ -150,7 +150,7 @@ function siteLinks() { return process.argv.includes('--site-links'); }
   if (!process.argv.includes('--no-outlook')) {
     try {
       const oo = await outlook.run(meta.card, { config: cfg, newsRows: rows, siteLinks: siteLinks(), backHref: siteLinks() ? '../' : '' });
-      console.log('明日关注个股：留档 ' + oo.days + ' 个添加日 ｜ 明细 ' + oo.rows + ' 行 ｜ T+1 已到位 ' + oo.t1 + ' 只 ｜ T+5 已到位 ' + oo.t5 + ' 只 ｜ ' +
+      console.log('明日关注个股：留档 ' + oo.days + ' 个添加日 ｜ 明细 ' + oo.rows + ' 行 ｜ T+1 已到位 ' + oo.t1 + ' 只 ｜ T+5 已到位 ' + oo.t5 + ' 只 ｜ 前向按日期修复 ' + (oo.forwardRepaired || 0) + ' 行 ｜ 入选时快照 ' + (oo.snapshotFrozen || 0) + ' 行 ｜ ' +
         (oo.skipped ? '本轮未新增（' + oo.skipped + '）' : '本轮新增 ' + oo.added + ' 只'));
     } catch (e) {
       console.log('明日关注个股：本轮生成失败（' + String((e && e.message) || e) + '），页面沿用上一版');
@@ -257,6 +257,7 @@ function siteLinks() { return process.argv.includes('--site-links'); }
     cardsLinks: siteLinks() ? [{ href: '../', label: '表格版' }] : [],
     outlookHref: siteLinks() ? 'outlook/' : '',
     boardHref: siteLinks() ? 'stocks/' : '',
+    starsHref: siteLinks() ? 'stars.json' : '',
     boardStocks: boardStocks,
     boardNewStocks: boardNewStocks,
     boardNewMeta: boardNewMeta,

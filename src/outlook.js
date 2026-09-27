@@ -51,7 +51,8 @@ const LISTS = {
 const DATA_FILE = LISTS.outlook.dataFile;
 const PAGE_FILE = path.join(LISTS.outlook.pageDir, 'index.html');
 
-const LOG_VERSION = 1;
+const LOG_VERSION = 2;
+const SNAPSHOT_VERSION = 1;
 const MAX_DAYS = 120;            // 日志最多保留多少个添加日期
 const DEFAULT_RECENT_DAYS = 8;   // 默认给最近多少个交易日刷新日线/调研
 // 09:30 之前的全市场快照还是上一交易日的收盘价，这时候记录会把昨天算成今天
@@ -231,6 +232,7 @@ function recordDay(log, picks, stamp, entryDay, opts) {
     let known = false;
     for (const x of entry.picks) if (x.code === p.code) known = true;
     if (known) continue;
+    const snapshot = typeof opts.snapshotFor === 'function' ? opts.snapshotFor(p) : null;
     entry.picks.push({
       code: p.code,
       name: p.name || '',
@@ -245,6 +247,7 @@ function recordDay(log, picks, stamp, entryDay, opts) {
       // 看板名单的 score 是动能、不是当日涨幅，所以只有明日看点用 pct 预填当日涨幅
       d0: opts.seedPct === false ? null : (p.pct === undefined ? null : p.pct),
       t: [null, null, null, null, null],
+      snapshot: snapshot,
     });
     added++;
   }
@@ -270,12 +273,15 @@ async function attach(log, cfg, opts) {
     for (const p of log.days[i].picks) {
       const ctime = secOf(p.addedAt);
       if (ctime === null) continue;
-      rows.push({ stockCode: p.code, stockName: p.name, ctime: ctime });
+      rows.push({ stockCode: p.code, stockName: p.name, ctime: ctime, day: String(p.addedAt || '').slice(0, 10) });
     }
   }
 
   const out = [];
   let refreshed = 0;
+  let forwardRepaired = 0;
+  let snapshotFrozen = 0;
+  let snapshotMissing = 0;
   if (rows.length && !opts.noFetch) {
     try {
       const tr = await technical.refresh(rows, { config: cfg });
@@ -289,8 +295,8 @@ async function attach(log, cfg, opts) {
     research.attachRows(rows);
   }
 
-  const byCode = new Map();
-  for (const r of rows) byCode.set(r.stockCode, r);
+  const byKey = new Map();
+  for (const r of rows) byKey.set(r.stockCode + '|' + String(r.day || '').slice(0, 10), r);
   const techStocks = technical.loadCache().stocks || {};
   const researchStocks = research.loadCache().stocks || {};
   let t1 = 0;
@@ -298,15 +304,24 @@ async function attach(log, cfg, opts) {
   const lines = [];
   for (const d of log.days) {
     for (const p of d.picks) {
-      const r = byCode.get(p.code);
-      if (r && r.forward) {
-        const f = r.forward;
-        if (p.d0 === null || p.d0 === undefined) p.d0 = f.d0;
-        if (f.close0 !== null && f.close0 !== undefined) p.close0 = f.close0;
-        for (let i = 0; i < 5; i++) {
-          if ((p.t[i] === null || p.t[i] === undefined) && f.t[i] !== null && f.t[i] !== undefined) p.t[i] = f.t[i];
-        }
-        if (f.day0) p.entryDay = f.day0;
+      const key = p.code + '|' + String(p.addedAt || '').slice(0, 10);
+      const r = byKey.get(key);
+      const rec = techStocks[p.code];
+      const f = technical.forwardReturns(rec, secOf(p.addedAt), { close: p.close0, changePct: p.d0 });
+      if (f && f.day0) {
+        const before = JSON.stringify({ day0: p.entryDay, close0: p.close0, d0: p.d0, t: p.t });
+        p.entryDay = f.day0;
+        p.close0 = f.close0;
+        p.d0 = f.d0;
+        p.t = f.t.slice(0, 5);
+        const after = JSON.stringify({ day0: p.entryDay, close0: p.close0, d0: p.d0, t: p.t });
+        if (before !== after) forwardRepaired++;
+      } else if (r && r.forward) {
+        // 日线暂不可用时保留已有值，但不再跨日期复用另一条记录的 forward。
+        const old = r.forward;
+        if (p.d0 === null || p.d0 === undefined) p.d0 = old.d0;
+        if (old.close0 !== null && old.close0 !== undefined) p.close0 = old.close0;
+        if (old.day0) p.entryDay = old.day0;
       }
       const t = p.t || [];
       const has = t.filter(function (v) { return v !== null && v !== undefined; }).length;
@@ -316,23 +331,44 @@ async function attach(log, cfg, opts) {
       const pre = preStats(techStocks[p.code], String(p.addedAt || '').slice(0, 10));
       if (pre.d1 !== null || pre.a10 !== null) p.pre = pre;
       else if (!p.pre) p.pre = pre;
-      // 动能分（RSI/KDJ/MACD 合成）跟着缓存走，明细页用它在股名下方标一行
-      const mom = technical.momentumScore(techStocks[p.code] && techStocks[p.code].metrics);
-      if (mom) p.mom = mom;
+      const snapshot = p.snapshot && p.snapshot.version === SNAPSHOT_VERSION ? p.snapshot : null;
+      if (snapshot && snapshot.complete) snapshotFrozen++;
+      else snapshotMissing++;
+      // 新记录使用纳入时冻结的动能/结论；旧记录若没有快照，明确保留为当前缓存状态。
+      const mom = snapshot && snapshot.momentum
+        ? snapshot.momentum
+        : technical.momentumScore(techStocks[p.code] && techStocks[p.code].metrics);
+      const technicalConclusion = snapshot && snapshot.technicalConclusion
+        ? snapshot.technicalConclusion
+        : technical.conclusionFor(techStocks[p.code]);
+      const researchConclusion = snapshot && snapshot.researchConclusion
+        ? snapshot.researchConclusion
+        : research.conclusionFor(researchStocks[p.code], groupedNews[p.code] || [], techStocks[p.code]);
       lines.push({
         day: d.day,
         dayText: dayLabel(d.day),
         tone: d.tone || '',
         upRatio: d.upRatio,
         backfilled: !!d.backfilled,
-        pick: p,
+        pick: Object.assign({}, p, { mom: mom }),
         avg: mean(t),
-        researchConclusion: research.conclusionFor(researchStocks[p.code], groupedNews[p.code] || [], techStocks[p.code]),
-        technicalConclusion: technical.conclusionFor(techStocks[p.code]),
+        researchConclusion: researchConclusion,
+        technicalConclusion: technicalConclusion,
+        snapshotState: snapshot && snapshot.complete ? 'frozen' : 'missing',
       });
     }
   }
-  return { lines: lines, refreshed: refreshed, t1: t1, t5: t5, refreshedCodes: rows.length, notes: out };
+  return {
+    lines: lines,
+    refreshed: refreshed,
+    t1: t1,
+    t5: t5,
+    forwardRepaired: forwardRepaired,
+    snapshotFrozen: snapshotFrozen,
+    snapshotMissing: snapshotMissing,
+    refreshedCodes: rows.length,
+    notes: out,
+  };
 }
 
 const CSS = [
@@ -359,6 +395,7 @@ const CSS = [
   '.research-item{display:block;margin:0 0 5px}.research-item:last-child{margin-bottom:0}',
   '.research-key{font-weight:700;color:#20252b}.research-impact{color:#c62828;font-weight:700}',
   '.sub{display:block;color:#888;font-size:11.5px;margin-top:2px;white-space:normal;line-height:1.45}',
+  '.snapshot-warn{display:block;color:#b45309;font-size:11.5px;margin-top:2px;line-height:1.45}',
   '.muted{color:#aaa;font-weight:400}',
   'tr.grp td{background:#fff7ed;color:#9a3412;font-weight:700;font-size:12.5px;border-color:#f5d7bd}',
   'tr.grp .gsub{color:#a16207;font-weight:400}',
@@ -465,7 +502,8 @@ function render(result, opts) {
           ' target=' + Q + '_blank' + Q + ' rel=' + Q + 'noopener noreferrer' + Q + ' title=' + Q + '在东方财富查看行情与K线' + Q + '>' + esc(p.name) + '</a>' +
           (p.theme ? '<span class=' + Q + 'sub' + Q + '>' + esc(report.outlookShort(p.theme)) + '</span>' : '') +
           (p.limitUp ? '<span class=' + Q + 'sub' + Q + '><span class=' + Q + 'up-limit' + Q + '>纳入日涨停</span></span>' : '') +
-          (report.momentumBrief(p.mom) ? '<span class=' + Q + 'sub' + Q + ' title=' + Q + esc(report.momentumText(p.mom)) + Q + '>' + esc(report.momentumBrief(p.mom)) + '</span>' : '') + '</td>' +
+          (report.momentumBrief(p.mom) ? '<span class=' + Q + 'sub' + Q + ' title=' + Q + esc(report.momentumText(p.mom)) + Q + '>' + esc(report.momentumBrief(p.mom)) + '</span>' : '') +
+          (ln.snapshotState === 'missing' ? '<span class=' + Q + 'snapshot-warn' + Q + '>历史快照缺失：当前缓存仅供参考</span>' : '') + '</td>' +
         PRE_WINDOWS.map(function (w) {
           return '<td class=' + Q + 'pct' + Q + ' data-label=' + Q + '前' + CN_NUM[w.len] + '日日均涨幅' + Q + '>' +
             preCell(pre[w.key], pre[w.n], w.len) + '</td>';
@@ -491,6 +529,7 @@ function render(result, opts) {
     + '前一日涨幅 = 纳入当日前一个交易日的收盘涨跌幅；'
     + '当日涨幅 = 纳入当日该股的收盘涨跌幅；T+N 涨幅 = 之后第 N 个交易日的收盘涨跌幅，尚未发生的档位显示「待更新」；'
     + '五日平均涨幅 = 已发生的 T+1~T+5 的算术平均。窗口不足（如次新股）会标出「已发生 n/N」，数据取不到显示「—」。'
+    + '历史收益按「股票代码 + 添加日期」绑定；新记录的技术面/调研结论在入选时冻结，旧记录若标注「历史快照缺失」，其结论来自当前缓存，仅供参考。'
     + (spec.tipExtra ? esc(spec.tipExtra) + ' ' : '')
     + '股名下方的「动能」= RSI(14)×30% + KDJ(9,3,3)×30% + MACD(12,26,9)×40%（0-100，鼠标悬停看分解；各指标先折算成 0-100：RSI 70 以上按超买回落，KDJ 按 K/D 金叉强度与 J 超买超卖，MACD 按柱状强度与零轴位置）。'
     + '名单由当日全市场行情推导，属于动量观察名单，不是预测，也不构成投资建议。</div>';
@@ -506,7 +545,7 @@ function render(result, opts) {
     '</head><body>',
     '<h1>' + esc(spec.title) + '</h1>',
     '<p class=' + Q + 'lede' + Q + '>' + esc(spec.lede) + '</p>',
-    '<div class=' + Q + 'meta' + Q + '>共 ' + lines.length + ' 只明细 ｜ ' + days.length + ' 个添加日期 ｜ T+1 已到位 ' + (result.t1 || 0) + ' 只 ｜ T+5 已到位 ' + (result.t5 || 0) + ' 只 ｜ 生成 ' + esc(stamp) + ' ' + back + '</div>',
+    '<div class=' + Q + 'meta' + Q + '>共 ' + lines.length + ' 只明细 ｜ ' + days.length + ' 个添加日期 ｜ T+1 已到位 ' + (result.t1 || 0) + ' 只 ｜ T+5 已到位 ' + (result.t5 || 0) + ' 只 ｜ 前向按代码+添加日期修复 ' + (result.forwardRepaired || 0) + ' 行 ｜ 入选时快照 ' + (result.snapshotFrozen || 0) + ' 行 ｜ 旧记录当前缓存 ' + (result.snapshotMissing || 0) + ' 行 ｜ 生成 ' + esc(stamp) + ' ' + back + '</div>',
     tip,
     (result.notes && result.notes.length ? '<div class=' + Q + 'tip' + Q + '>' + esc(result.notes.join('；')) + '</div>' : ''),
     '<div class=' + Q + 'bar' + Q + '><input id=' + Q + 'q' + Q + ' type=' + Q + 'search' + Q + ' placeholder=' + Q + '搜索股票 / 题材 / 结论…' + Q + ' autocomplete=' + Q + 'off' + Q + '>'
@@ -547,6 +586,34 @@ async function runList(spec, picks, stampMs, opts) {
   const calDays = opts.calendar || await tradingDays(60);
   const entryDay = calDays.length ? resolveEntryDay(calDays, stamp.day) : stamp.day;
   const list = (picks || []).filter(function (p) { return p && p.code; });
+  const techStocks = opts.technicalStocks || (technical.loadCache().stocks || {});
+  const researchStocks = opts.researchStocks || (research.loadCache().stocks || {});
+  const groupedNews = {};
+  for (const r of opts.newsRows || []) {
+    if (!r || !r.stockCode) continue;
+    if (!groupedNews[r.stockCode]) groupedNews[r.stockCode] = [];
+    groupedNews[r.stockCode].push(r);
+  }
+  const snapshotFor = function (p) {
+    const tech = techStocks[p.code];
+    const researchRecord = researchStocks[p.code];
+    const metrics = tech && tech.metrics;
+    const technicalConclusion = metrics ? technical.conclusionFor(tech) : null;
+    const researchConclusion = researchRecord && !researchRecord.errorOnly
+      ? research.conclusionFor(researchRecord, groupedNews[p.code] || [], tech)
+      : null;
+    return {
+      version: SNAPSHOT_VERSION,
+      capturedAt: stamp.text,
+      technicalAt: tech && tech.at || null,
+      technicalDay: metrics && metrics.day || null,
+      momentum: metrics ? technical.momentumScore(metrics) : null,
+      technicalConclusion: technicalConclusion,
+      researchAt: researchRecord && researchRecord.researchedAt || null,
+      researchConclusion: researchConclusion,
+      complete: !!(technicalConclusion && researchConclusion),
+    };
+  };
   let skipped = null;
   let added = 0;
   if (!list.length) {
@@ -564,6 +631,7 @@ async function runList(spec, picks, stampMs, opts) {
       seedPct: opts.seedPct,
       tone: opts.tone,
       upRatio: opts.upRatio,
+      snapshotFor: snapshotFor,
     });
     if (!added) skipped = '当天名单无新增（已留档）';
   }

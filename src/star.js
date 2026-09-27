@@ -20,6 +20,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const collectMod = require('./collect.js');
+const technical = require('./technical.js');
 
 const FILE = path.join(collectMod.DATA_DIR, 'stars.json');
 const VERSION = 1;
@@ -54,6 +55,38 @@ function starMoment(epochMs) {
 }
 
 function round2(v) { return Math.round(Number(v) * 100) / 100; }
+
+function shanghaiDaySec(day) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(day || ''));
+  if (!m) return null;
+  return Math.floor(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]), -8, 0, 0) / 1000);
+}
+
+function forwardForDay(rec, day, pick) {
+  const sec = shanghaiDaySec(day);
+  if (sec === null) return null;
+  const f = technical.forwardReturns(rec, sec, {
+    close: pick && pick.price,
+    changePct: pick && pick.chgPct,
+  });
+  if (!f || !f.day0) return null;
+  return { day0: f.day0, close0: f.close0, d0: f.d0, t: f.t.slice(0, 5) };
+}
+
+function updateHistoryForward(store, techStocks) {
+  let changed = 0;
+  for (const day of Object.keys(store.history || {})) {
+    const item = store.history[day];
+    for (const p of (item && item.picks) || []) {
+      const f = forwardForDay(techStocks[p.code], day, p);
+      if (!f) continue;
+      const before = JSON.stringify(p.forward || null);
+      p.forward = f;
+      if (before !== JSON.stringify(f)) changed++;
+    }
+  }
+  return changed;
+}
 
 function readJson(file) {
   try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch (_) { return null; }
@@ -335,6 +368,9 @@ function run(rows, opts) {
   const today = shanghaiDateKey(now);
   const moment = starMoment(now);
   const store = load();
+  const techStocks = opts.technical || {};
+  const forwardBackfilled = updateHistoryForward(store, techStocks);
+  if (forwardBackfilled) save(store);
   // 20:00 之后重算；另外「一份都没有」时（刚部署、换了机器）也先算一次，避免页面空着
   const due = opts.force === true || (now >= moment && store.date !== today) || !(store.picks && store.picks.length);
   const hasInput = Array.isArray(rows) && rows.length > 0 && opts.technical && Object.keys(opts.technical).length > 0;
@@ -353,11 +389,21 @@ function run(rows, opts) {
         at: store.updatedAt,
         hm: shanghaiHm(now),
         picks: picks.map(function (p) {
-          return { code: p.code, name: p.name, price: p.price, score: p.score, entry: p.entry, stop: p.stop, target1: p.target1 };
+          return {
+            code: p.code,
+            name: p.name,
+            price: p.price,
+            chgPct: p.chgPct,
+            score: p.score,
+            entry: p.entry,
+            stop: p.stop,
+            target1: p.target1,
+            forward: forwardForDay(techStocks[p.code], today, p),
+          };
         }),
       };
       save(store);
-      return { date: store.date, updatedAt: store.updatedAt, hm: shanghaiHm(now), picks: picks, tier: chosen.tier, tierLabel: chosen.tierLabel, refreshed: true, historyDays: Object.keys(store.history).length };
+      return { date: store.date, updatedAt: store.updatedAt, hm: shanghaiHm(now), picks: picks, tier: chosen.tier, tierLabel: chosen.tierLabel, refreshed: true, historyDays: Object.keys(store.history).length, forwardBackfilled: forwardBackfilled };
     }
   }
   return {
@@ -369,6 +415,7 @@ function run(rows, opts) {
     tierLabel: store.tierLabel || '',
     refreshed: false,
     historyDays: Object.keys(store.history || {}).length,
+    forwardBackfilled: forwardBackfilled,
   };
 }
 

@@ -262,9 +262,11 @@ function starSection(card, opts) {
     '<div class=\'star-wrap\'>',
     '<div class=\'star-hdrow\'><span class=\'star-title\'>明星看点</span>' +
       '<span class=\'star-badge\'>每天 20:00 重算</span>' +
-      '<span class=\'star-meta\'>' + (stamp ? '本版 ' + esc(stamp) + ' 生成 ｜ ' : '') + '为次日关注，点股票名看行情</span></div>',
+      '<span class=\'star-meta\'>' + (stamp ? '本版 ' + esc(stamp) + ' 生成 ｜ ' : '') + '为次日关注，点股票名看行情' +
+      (opts.starsHref ? ' ｜ <a href=' + Q + esc(opts.starsHref) + Q + ' target=' + Q + '_blank' + Q + ' rel=' + Q + 'noopener noreferrer' + Q + '>历史前向跟踪 JSON →</a>' : '') +
+      '</span></div>',
     '<div class=\'star-grid\'>' + cards + '</div>',
-    '<div class=\'mkt-note\'>口径：从当日看板涉及的股票里选，要求「处于当日主线 + 站上 20 日均线 + 市值与估值不过分 + 近期无风险公告」，再按趋势结构、动能、量能、基本面打分取前 ' + mkInt(st.picks.length) + ' 名（本版档位：' + esc(st.tierLabel || ('第 ' + (st.tier || 1) + ' 档')) + '）。低吸 / 止损 / 目标为规则推导的参考位，不是预测，不构成投资建议。</div>',
+    '<div class=\'mkt-note\'>口径：从当日看板涉及的股票里选，要求「处于当日主线 + 站上 20 日均线 + 市值与估值不过分 + 近期无风险公告」，再按趋势结构、动能、量能、基本面打分取前 ' + mkInt(st.picks.length) + ' 名（本版档位：' + esc(st.tierLabel || ('第 ' + (st.tier || 1) + ' 档')) + '）。低吸 / 止损 / 目标为规则推导的参考位，不是预测，不构成投资建议。历史前向表现按选股日期写入 JSON，后续刷新后逐步补齐 T+1~T+5。</div>',
     '</div>',
   ].join('\n');
 }
@@ -459,7 +461,7 @@ function marketCardHtml(card, opts) {
 
 // ---------------- 财联社新闻股票看板（当天行情卡片之后、表格之前） ----------------
 // 全部指标都由表格自身的行数据算出，不额外请求网络。
-// 口径：一条记录 = 一条新闻 × 一只涉及股票；涨幅 = 该股在新闻当日的涨跌幅；胜率 = 当日上涨的记录占比。
+// 口径：一条记录 = 一条新闻 × 一只涉及股票；涨幅 = 该股在新闻当日的涨跌幅；当日上涨占比 = 当日上涨记录占比。
 function boardThemes(conclusion) {
   const m = /题材：([^\n]+)/.exec(String(conclusion || ''));
   if (!m) return [];
@@ -469,6 +471,17 @@ function boardThemes(conclusion) {
 
 function boardPct(item) { return item.nn ? mkPct(item.sum / item.nn) : '—'; }
 function boardWin(item) { return item.nn ? Math.round(item.wins / item.nn * 100) + '%' : '—'; }
+function boardWinCi(item) {
+  const n = Number(item && item.nn);
+  const wins = Number(item && item.wins);
+  if (!Number.isFinite(n) || n <= 0 || !Number.isFinite(wins)) return null;
+  const z = 1.96;
+  const p = wins / n;
+  const den = 1 + z * z / n;
+  const center = (p + z * z / (2 * n)) / den;
+  const half = z * Math.sqrt((p * (1 - p) + z * z / (4 * n)) / n) / den;
+  return [Math.max(0, Math.round((center - half) * 100)), Math.min(100, Math.round((center + half) * 100))];
+}
 
 /** 聚合项下的关联股票：按提及次数优先，平均涨幅次之。 */
 function boardRelatedStocks(item, limit) {
@@ -491,7 +504,7 @@ function boardRelatedStocks(item, limit) {
 }
 
 /**
- * 新闻看板「个股表现」的候选池：把「新闻 × 股票」的记录聚合成每只股票的条数、平均涨幅、胜率。
+ * 新闻看板「个股表现」的候选池：把「新闻 × 股票」的记录聚合成每只股票的条数、平均涨幅、当日上涨占比。
  * 只做聚合不做排序——排序（按 5 日动能）在 src/cli.js 里用日线缓存算，看板与明细页共用同一份顺序。
  */
 function boardStocks(rows) {
@@ -568,10 +581,10 @@ function newsBoardHtml(rows, opts) {
       .sort(function (a, b) { return (b.n - a.n) || ((b.nn ? b.sum / b.nn : -999) - (a.nn ? a.sum / a.nn : -999)); })
       .slice(0, limit);
   };
-  // 胜率排序：样本 < 2 条的一律排除，否则「1 条 +20%」会霸榜成 100%
+  // 当日上涨占比排序：样本 < 20 条的一律排除，避免小样本噪声霸榜。
   const byWin = function (map, limit) {
     return Array.from(map.values())
-      .filter(function (x) { return x.nn >= 2; })
+      .filter(function (x) { return x.nn >= 20; })
       .sort(function (a, b) { return (b.wins / b.nn - a.wins / a.nn) || (b.nn - a.nn); })
       .slice(0, limit);
   };
@@ -580,14 +593,14 @@ function newsBoardHtml(rows, opts) {
       nameHtml +
       '<span class="mk-meta">' + meta + '</span>' +
       '<span class="mk-p ' + mkCls(item.nn ? item.sum / item.nn : 0) + '">' + boardPct(item) + '</span>' +
-      '<span class="mk-fund">胜率 ' + boardWin(item) + '</span></div>';
+      '<span class="mk-fund">上涨占比 ' + boardWin(item) + '</span></div>';
   };
   const topicRows = byCount(topic, 8).map(function (t, i) {
     t.stocks = boardRelatedStocks(t, 8);
     return groupRow(t, i, {
       meta: t.n + ' 次 · ' + t.stockMap.size + ' 只',
       tail: '<span class="mk-p ' + mkCls(t.nn ? t.sum / t.nn : 0) + '">' + boardPct(t) + '</span>' +
-        '<span class="mk-fund">胜率 ' + boardWin(t) + '</span>',
+        '<span class="mk-fund">上涨占比 ' + boardWin(t) + '</span>',
     });
   }).join('');
   const columnRows = byAvg(column, 8).map(function (t, i) {
@@ -595,16 +608,16 @@ function newsBoardHtml(rows, opts) {
     return groupRow(t, i, {
       meta: t.n + ' 条 · ' + t.stockMap.size + ' 只',
       tail: '<span class="mk-p ' + mkCls(t.nn ? t.sum / t.nn : 0) + '">' + boardPct(t) + '</span>' +
-        '<span class="mk-fund">胜率 ' + boardWin(t) + '</span>',
+        '<span class="mk-fund">上涨占比 ' + boardWin(t) + '</span>',
     });
   }).join('');
   const winRows = byWin(column, 8).map(function (t, i) {
     const rate = t.wins / t.nn;
     t.stocks = boardRelatedStocks(t, 8);
     return groupRow(t, i, {
-      meta: t.n + ' 条 · ' + t.stockMap.size + ' 只',
-      tail: '<span class="mk-p ' + mkCls(rate - 0.5) + '">胜率 ' + boardWin(t) + '</span>' +
-        '<span class="mk-fund">' + boardPct(t) + '</span>',
+      meta: t.n + ' 条 · ' + t.stockMap.size + ' 只 · 有效样本 ' + t.nn,
+      tail: '<span class="mk-p ' + mkCls(rate - 0.5) + '">上涨占比 ' + boardWin(t) + '</span>' +
+        (boardWinCi(t) ? '<span class="mk-fund">95%区间 ' + boardWinCi(t)[0] + '%~' + boardWinCi(t)[1] + '%</span>' : ''),
     });
   }).join('');
   const newStockRows = (opts.boardNewStocks || []).slice(0, 12).map(function (t, i) {
@@ -644,29 +657,33 @@ function newsBoardHtml(rows, opts) {
       : '<span class="mk-p ' + mkCls(score - 50) + '" title=' + Q + esc(momentumText(mom)) + Q + '>动能 ' + score + '</span>';
     return '<div class="mk-row"><span class="mk-rank' + (i < 3 ? ' top' : '') + '">' + (i + 1) + '</span>' +
       nameHtml +
-      '<span class="mk-meta">' + t.n + ' 条 · 胜率 ' + boardWin(t) + '</span>' +
+      '<span class="mk-meta">' + t.n + ' 条 · 上涨占比 ' + boardWin(t) + '</span>' +
       momHtml +
       '<span class="mk-fund">' + boardPct(t) + '</span></div>';
   }).join('');
   const avgAll = nnAll ? sumAll / nnAll : null;
+  const allCi = boardWinCi({ wins: winsAll, nn: nnAll });
+  const winRowsHtml = winRows || '<div class="mkt-note">暂无达到最小样本数 20 的栏目，暂不排名。</div>';
   const summary = '<div class="bd-stats">' +
     '<span><b>' + list.length + '</b> 条记录</span>' +
     '<span><b>' + codes.size + '</b> 只股票</span>' +
     '<span><b>' + column.size + '</b> 个栏目</span>' +
     '<span><b>' + topic.size + '</b> 个题材</span>' +
     '<span>样本平均涨幅 <b class="' + mkCls(avgAll === null ? 0 : avgAll) + '">' + (avgAll === null ? '—' : mkPct(avgAll)) + '</b></span>' +
-    '<span>上涨占比 <b>' + (nnAll ? Math.round(winsAll / nnAll * 100) + '%' : '—') + '</b></span>' +
+    '<span>当日上涨占比 <b>' + (nnAll ? Math.round(winsAll / nnAll * 100) + '%' : '—') + '</b>' +
+      (allCi ? '（95%区间 ' + allCi[0] + '%~' + allCi[1] + '%）' : '') + '</span>' +
     '</div>';
   return [
     '<section class="mkt">',
     '<div class="mkt-hd"><strong>财联社新闻股票看板</strong><span class="mkt-sub">' +
-      '涨幅 = 该股在新闻当日的涨跌幅 ｜ 胜率 = 当日上涨记录占比 ｜ 一行为一条「新闻 × 股票」 ｜ ' +
+      '涨幅 = 该股在新闻当日的涨跌幅 ｜ 当日上涨占比 = 新闻当日上涨记录占比（不是前瞻胜率） ｜ 一行为一条「新闻 × 股票」 ｜ ' +
       '动能 = RSI(14)×30% + KDJ(9,3,3)×30% + MACD(12,26,9)×40%（各指标先折算成 0-100：RSI 70 以上按超买回落，KDJ 按 K/D 金叉强度与 J 超买超卖，MACD 按柱状强度与零轴位置；鼠标悬停看分解）</span></div>',
     summary,
     '<div class="mkt-grid">',
     '<div class="mkt-box"><div class="mkt-h">最热题材 / 板块（按提及次数）</div><div class="mkt-list">' + topicRows + '</div></div>',
     '<div class="mkt-box"><div class="mkt-h">各栏目表现（按平均涨幅）</div><div class="mkt-list">' + columnRows + '</div></div>',
-    '<div class="mkt-box"><div class="mkt-h">各栏目胜率（样本 ≥ 2 条）</div><div class="mkt-list">' + winRows + '</div></div>',
+    '<div class="mkt-box"><div class="mkt-h">各栏目当日上涨占比（样本 ≥ 20）</div><div class="mkt-list">' + winRowsHtml + '</div></div>',
+    '<div class="mkt-box mkt-wide"><div class="mkt-note">基准对照：未计算（当前流程没有同窗口全市场历史行情，暂不使用不匹配区间的基准冒充同期对照）。以上涨幅、上涨占比和栏目排序均为描述性统计，不能直接视为买入后的胜率或超额收益。</div></div>',
     '<div class="mkt-box mkt-wide"><div class="mkt-h">' + esc(newTitle) + '</div><div class="mkt-list">' + newBody + '</div>' +
       '<div class="mkt-note">实时口径：随每轮新闻抓取和页面发布重算；本轮更新于 ' + esc(newMeta.updatedAt || '—') + '。取当前表格中最新新闻日的股票记录；所有前缀或标题含“龙虎榜”的记录已排除。共 ' + (newMeta.count || 0) + ' 只，动能分为 RSI(14)×30% + KDJ(9,3,3)×30% + MACD(12,26,9)×40%。</div></div>',
     '<div class="mkt-box"><div class="mkt-h">个股表现（' + (useMomentum ? '按动能排序' : '按平均涨幅') + '）' +
@@ -1113,6 +1130,7 @@ function writeCardsVariant(rows, meta, opts, base) {
     layout: 'cards', links: opts.cardsLinks || [], outlookHref: outlookHref,
     boardHref: boardHref, boardStocks: opts.boardStocks,
     boardNewStocks: opts.boardNewStocks, boardNewMeta: opts.boardNewMeta,
+    starsHref: opts.starsHref ? '../' + opts.starsHref : '',
   }), 'utf8');
   return p;
 }

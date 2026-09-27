@@ -72,6 +72,9 @@ jobs:
           curl -fsSL --retry 2 https://yunqingzou-bit.github.io/cls-news-dashboard/research.json -o data/research.json || true
           curl -fsSL --retry 2 https://yunqingzou-bit.github.io/cls-news-dashboard/technical.json -o data/technical.json || true
           curl -fsSL --retry 2 https://yunqingzou-bit.github.io/cls-news-dashboard/market.json -o data/market.json || true
+          # 新闻抓取失败时，用线上上一版新闻池重新导出当前代码生成的页面，避免数据源抖动阻断发布。
+          curl -fsSL --retry 2 https://yunqingzou-bit.github.io/cls-news-dashboard/news.json -o data/news.remote.json || true
+          if [ -s data/news.remote.json ]; then cp data/news.remote.json data/news.json; fi
           # 明星看点的历史留档：线上已有就以线上为准（每天 20:00 重算并覆盖当天）
           curl -fsSL --retry 2 https://yunqingzou-bit.github.io/cls-news-dashboard/stars.json -o data/stars.json || true
           # 明日关注个股历史：首次上线用仓库里的种子，线上已有历史时以线上为准
@@ -83,7 +86,16 @@ jobs:
       - name: 抓取（只跑沪深A股池，避免把个人自选股带进公开页面）
         env:
           TZ: Asia/Shanghai
-        run: node src/cli.js --pool all-a --days 7 --site-links
+        run: |
+          set +e
+          node src/cli.js --pool all-a --days 7 --site-links
+          code=$?
+          set -e
+          if [ "$code" -ne 0 ]; then
+            echo "WARN: 新闻源本轮抓取失败，恢复线上上一版新闻池，用当前代码继续导出页面。"
+            if [ -s data/news.remote.json ]; then cp data/news.remote.json data/news.json; fi
+            node src/cli.js --export --no-sync --no-text --no-technical --no-research --pool all-a --days 7 --site-links
+          fi
 
       - name: Stockbee 动量爆发研究（近三个月 + T+1 ~ T+5 前瞻收益）
         env:

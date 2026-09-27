@@ -390,7 +390,7 @@ function marketCardHtml(card, opts) {
   const marketReviewLink = opts.marketReviewHref
     ? '<a class="mkt-review-link" href=' + Q + esc(opts.marketReviewHref) + Q +
       ' target=' + Q + '_blank' + Q + ' rel=' + Q + 'noopener noreferrer' + Q +
-      ' style=' + Q + 'margin-left:auto;color:#1257a8;font-weight:700;text-decoration:none;white-space:nowrap' + Q + '>今日市场复盘 →</a>'
+      ' style=' + Q + 'margin-left:auto;color:#1257a8;font-weight:700;text-decoration:none;white-space:nowrap' + Q + '>实时市场复盘 →</a>'
     : '';
 
   const idxRows = (card.indexes || []).map(function (x) {

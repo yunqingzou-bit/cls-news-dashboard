@@ -728,7 +728,7 @@ const CARD_SCRIPT = '<script>' + "(function(){\n  var els = document.querySelect
 const MARKET_CSS = ".mkt{position:relative;background:linear-gradient(180deg,#fff 0%,#f7f9fc 100%);border:1px solid #e3e8ef;border-radius:1em;padding:1.16em 1.2em 1.2em;margin:0 0 1.3em;box-shadow:0 1px 2px rgba(16,24,40,.04),0 10px 26px -16px rgba(16,24,40,.28);font-size:12.5px}.mkt::before{content:'';position:absolute;left:0;right:0;top:0;height:.26em;border-radius:1em 1em 0 0;background:linear-gradient(90deg,#d93025 0%,#e8873a 46%,#2f9e5f 100%);opacity:.9}.mkt-hd{display:flex;align-items:baseline;gap:.6em;flex-wrap:wrap;margin-bottom:.92em}.mkt-hd strong{font-size:1.26em;letter-spacing:.01em}.mkt-sub{color:#8a929e;font-size:.95em}.mkt-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(19.8em,1fr));gap:.9em}.mkt-box{border:1px solid #eaeef4;border-radius:.72em;padding:.82em .92em .9em;background:#fff;min-width:0}.mkt-wide{grid-column:1/-1}.mkt-h{display:flex;align-items:center;gap:.44em;color:#5b6472;font-size:.95em;font-weight:700;margin-bottom:.62em}.mkt-h::before{content:'';width:.28em;height:.95em;border-radius:.14em;background:#c9d3e0}.mkt-list{display:block}.idx-item{display:flex;align-items:baseline;gap:.5em;padding:.3em .52em;border-radius:.46em;margin-bottom:.26em;background:#f7f9fc}.idx-item:last-child{margin-bottom:0}.idx-item.up{background:linear-gradient(90deg,#fdf1f0,#fff)}.idx-item.down{background:linear-gradient(90deg,#eef8f2,#fff)}.idx-n{color:#414a56;font-weight:600}.idx-v{margin-left:auto;color:#2a3038;font-variant-numeric:tabular-nums}.idx-p{flex:0 0 auto;min-width:4.6em;text-align:center;border-radius:.4em;padding:.08em .3em;font-weight:700;font-variant-numeric:tabular-nums}.idx-item.up .idx-p{background:#fdecea}.idx-item.down .idx-p{background:#e7f6ec}.br-bar{display:flex;height:.52em;border-radius:.26em;overflow:hidden;background:#eef1f5;margin:0 0 .62em}.br-bar i{display:block;height:100%}.br-bar i.up{background:#e05a52}.br-bar i.flat{background:#c8ced8}.br-bar i.down{background:#3aa06a}.mkt-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:.44em}.mk-stat{display:flex;flex-direction:column;align-items:center;gap:.08em;background:#f7f9fc;border:1px solid #eef2f7;border-radius:.5em;padding:.44em .3em}.mk-stat.up{background:#fdf3f2;border-color:#f8dcd9}.mk-stat.down{background:#eef8f2;border-color:#d8ecdf}.mk-stat-n{font-size:1.24em;font-weight:800;line-height:1.24;font-variant-numeric:tabular-nums}.mk-stat-l{color:#8a929e;font-size:.85em}.mkt-note{color:#8a929e;font-size:.9em;margin-top:.62em;line-height:1.6}.mk-row{display:flex;align-items:center;gap:.5em;flex-wrap:wrap;font-size:1em;line-height:1.8;padding:.14em 0;border-bottom:1px dashed #eef1f5}.mk-row:last-child{border-bottom:0}.mk-rank{flex:0 0 auto;min-width:1.5em;height:1.5em;line-height:1.5em;text-align:center;border-radius:.34em;background:#eef2f8;color:#69737f;font-size:.84em;font-weight:700;font-variant-numeric:tabular-nums}.mk-rank.top{background:linear-gradient(135deg,#f0b23c,#e2662f);color:#fff}.mk-k{color:#1f252c;font-weight:700}.mk-meta{color:#8a929e;font-size:.93em}.mk-best{margin-left:auto;color:#4a525c;font-size:.93em}.mk-link{color:#1257a8;text-decoration:none;font-weight:600;max-width:8em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.mk-p{flex:0 0 auto;margin-left:auto;min-width:4.4em;text-align:center;border-radius:.4em;padding:.08em .3em;font-weight:700;font-variant-numeric:tabular-nums}.mk-p.f-up{background:#fdecea}.mk-p.f-down{background:#e7f6ec}.mk-p.f-flat{background:#f1f3f6}.mk-fund{margin-left:.66em;min-width:5em;text-align:right;color:#6b737e;font-size:.93em;font-variant-numeric:tabular-nums}.mkt-hot{display:grid;grid-template-columns:repeat(auto-fit,minmax(16.8em,1fr));gap:.2em 1.5em}.mkt-hot-col{min-width:0}.mkt-hot-h{display:flex;align-items:center;gap:.4em;color:#5b6472;font-size:.9em;font-weight:700;margin:.2em 0 .32em}.mkt-hot-h::before{content:'';width:.34em;height:.34em;border-radius:50%;background:#c9d3e0}.f-flat{color:#6b7280}body.mk-phone .mkt{font-size:28px}";
 
 
-const CSS_BASE = "body{font-family:'Microsoft YaHei',system-ui,sans-serif;margin:24px;color:#1c1c1e;background:#fafafa}h1{font-size:20px;margin:0 0 6px}.meta{color:#666;font-size:13px;margin-bottom:16px}.meta a{white-space:nowrap}.hint{color:#888;font-size:12.5px}table{border-collapse:collapse;width:100%;background:#fff;font-size:13px;table-layout:fixed}th,td{border:1px solid #e5e5e5;padding:8px 10px;vertical-align:top;text-align:left;overflow-wrap:anywhere;word-break:break-word}th{background:#f2f3f5;position:sticky;top:0;z-index:2}td.t{white-space:normal;color:#555;font-variant-numeric:tabular-nums}td.txt{line-height:1.6;white-space:pre-wrap}td.src{white-space:nowrap;color:#888;font-size:12px}.pf{display:inline-block;background:#fff1e6;color:#c2410c;border:1px solid #ffd7bd;border-radius:3px;padding:1px 6px;white-space:normal;overflow-wrap:anywhere;word-break:break-word;line-height:1.45;text-align:center}.pl{display:inline-block;background:#eef4fb;color:#1257a8;border:1px solid #cfe0f2;border-radius:3px;padding:1px 6px;white-space:nowrap;font-size:12px;margin:0 3px 2px 0}a{color:#1257a8;text-decoration:none}a:hover{text-decoration:underline}.tw{background:#fff}" ;
+const CSS_BASE = "body{font-family:'Microsoft YaHei',system-ui,sans-serif;margin:24px;color:#1c1c1e;background:#fafafa}h1{font-size:20px;margin:0 0 6px}.meta{color:#666;font-size:13px;margin-bottom:16px}.meta a{white-space:nowrap}.hint{color:#888;font-size:12.5px}table{border-collapse:collapse;width:100%;background:#fff;font-size:13px;table-layout:fixed}th,td{border:1px solid #e5e5e5;padding:8px 10px;vertical-align:top;text-align:left;overflow-wrap:anywhere;word-break:break-word}th{background:#f2f3f5;position:sticky;top:0;z-index:2}td.t{white-space:normal;color:#555;font-variant-numeric:tabular-nums}td.txt{line-height:1.6;white-space:pre-wrap}td.src{white-space:nowrap;color:#888;font-size:12px}.pf{display:inline-block;background:#fff1e6;color:#c2410c;border:1px solid #ffd7bd;border-radius:3px;padding:1px 6px;white-space:normal;overflow-wrap:anywhere;word-break:break-word;line-height:1.45;text-align:center}.pl{display:inline-block;background:#eef4fb;color:#1257a8;border:1px solid #cfe0f2;border-radius:3px;padding:1px 6px;white-space:nowrap;font-size:12px;margin:0 3px 2px 0}a{color:#1257a8;text-decoration:none}a:hover{text-decoration:underline}.tw{background:#fff}.load-more{display:block;margin:12px auto;padding:9px 16px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;color:#1257a8;cursor:pointer;font-size:13px}.load-more:hover{background:#eff6ff}" ;
 
 // ---------------- 页面最前边的直达入口 ----------------
 // 本看板各版本 + 数据文件 + 同账号下其他看板。全部用绝对地址，任何页面、本地打开都能直接点。
@@ -831,7 +831,7 @@ function toHtml(rows, meta, opts) {
       : '<th>' + esc(h) + '</th>';
   }).join('');
   const colgroup = '<colgroup>' + HTML_COL_WIDTHS.map(function (w) { return '<col style=' + Q + 'width:' + w + '%' + Q + '>'; }).join('') + '</colgroup>';
-  const body = rows.map(function (r) {
+  const rowHtml = function (r) {
     const stockText = esc(r.stock || r.stocks);
     const stockHtml = r.stockCode
       ? '<a href=' + Q + 'https://quote.eastmoney.com/' + encodeURIComponent(r.stockCode) + '.html' + Q +
@@ -856,21 +856,55 @@ function toHtml(rows, meta, opts) {
       '<td class=' + Q + 'research' + Q + ' data-label=' + Q + '调研结论' + Q + '>' + researchHtml(r.researchConclusion) + '</td>' +
       '<td class=' + Q + 'tech' + Q + ' data-label=' + Q + '技术面结论' + Q + '>' + technicalHtml(r.technicalConclusion) + '</td>' +
       '</tr>';
-  }).join('\n');
+  };
+  // 移动端内嵌浏览器对长正文 + 多列大表的初始 DOM 很敏感：先只放首屏行，
+  // 其余行保存在脚本字符串里，用户点击后再插入。数据不丢，只降低首屏渲染峰值。
+  const initialLimit = layout === 'cards' ? 40 : 60;
+  const rowHtmlList = rows.map(rowHtml);
+  const body = rowHtmlList.slice(0, initialLimit).join('\n');
+  const deferredBody = rowHtmlList.slice(initialLimit).join('\n');
+  const filterOptionMap = {};
+  ['data-prefix', 'data-date', 'data-play', 'data-trend'].forEach(function (attr) {
+    const counts = {};
+    rows.forEach(function (r) {
+      let v = '';
+      if (attr === 'data-prefix') v = String(r.prefix || '');
+      else if (attr === 'data-date') v = String(r.time || '').slice(0, 10);
+      else if (attr === 'data-play') v = playFrom(r.researchConclusion);
+      else if (attr === 'data-trend') v = trendFrom(r.technicalConclusion);
+      if (v) counts[v] = (counts[v] || 0) + 1;
+    });
+    filterOptionMap[attr] = counts;
+  });
   const toolbar = [
     '<div class=' + Q + 'bar' + Q + '>',
     '<input id=' + Q + 'q' + Q + ' type=' + Q + 'search' + Q + ' placeholder=' + Q + '搜索股票、标题或正文…' + Q + '>',
     // 四个筛选器都改成可多选的复选下拉，data-* 让脚本自己认领
-    '<div class=' + Q + 'msel' + Q + ' data-msel=' + Q + 'data-prefix' + Q + ' data-label=' + Q + '全部栏目' + Q + '></div>',
-    '<div class=' + Q + 'msel' + Q + ' data-msel=' + Q + 'data-date' + Q + ' data-label=' + Q + '全部日期' + Q + '></div>',
-    '<div class=' + Q + 'msel' + Q + ' data-msel=' + Q + 'data-play' + Q + ' data-label=' + Q + '全部短线博弈' + Q + ' data-prefer=' + Q + '适合,可关注,中性,不适合' + Q + '></div>',
-    '<div class=' + Q + 'msel' + Q + ' data-msel=' + Q + 'data-trend' + Q + ' data-label=' + Q + '全部趋势' + Q + '></div>',
+    '<div class=' + Q + 'msel' + Q + ' data-msel=' + Q + 'data-prefix' + Q + ' data-options=' + Q + esc(JSON.stringify(filterOptionMap['data-prefix'])) + Q + ' data-label=' + Q + '全部栏目' + Q + '></div>',
+    '<div class=' + Q + 'msel' + Q + ' data-msel=' + Q + 'data-date' + Q + ' data-options=' + Q + esc(JSON.stringify(filterOptionMap['data-date'])) + Q + ' data-label=' + Q + '全部日期' + Q + '></div>',
+    '<div class=' + Q + 'msel' + Q + ' data-msel=' + Q + 'data-play' + Q + ' data-options=' + Q + esc(JSON.stringify(filterOptionMap['data-play'])) + Q + ' data-label=' + Q + '全部短线博弈' + Q + ' data-prefer=' + Q + '适合,可关注,中性,不适合' + Q + '></div>',
+    '<div class=' + Q + 'msel' + Q + ' data-msel=' + Q + 'data-trend' + Q + ' data-options=' + Q + esc(JSON.stringify(filterOptionMap['data-trend'])) + Q + ' data-label=' + Q + '全部趋势' + Q + '></div>',
     '<span class=' + Q + 'cnt' + Q + ' id=' + Q + 'cnt' + Q + '></span>',
     '</div>',
   ].join('');
   const script = '<script>' + `
 (function(){
   var rows = [].slice.call(document.querySelectorAll('tbody tr'));
+  var totalRows = ${rows.length};
+  var deferredHtml = ${JSON.stringify(deferredBody)};
+  var allLoaded = !deferredHtml;
+  var loadMore = document.getElementById('loadMore');
+  function ensureAll(){
+    if (allLoaded) return;
+    var bodyEl = document.querySelector('tbody');
+    if (bodyEl) bodyEl.insertAdjacentHTML('beforeend', deferredHtml);
+    deferredHtml = '';
+    allLoaded = true;
+    rows = [].slice.call(document.querySelectorAll('tbody tr'));
+    searchText = null;
+    if (loadMore) loadMore.remove();
+  }
+  if (loadMore) loadMore.addEventListener('click', ensureAll);
   var q = document.getElementById('q');
   var cnt = document.getElementById('cnt');
   var hint = document.getElementById('hint');
@@ -901,7 +935,11 @@ function toHtml(rows, meta, opts) {
     var prefer = (box.getAttribute('data-prefer') || '').split(',').filter(Boolean);
     var counts = {};
     var list = [];
-    rows.forEach(function (r) {
+    var rawOptions = box.getAttribute('data-options');
+    if (rawOptions) {
+      try { counts = JSON.parse(rawOptions) || {}; list = Object.keys(counts); } catch (e) {}
+    }
+    if (!list.length) rows.forEach(function (r) {
       var v = r.getAttribute(attr) || '';
       if (!v) return;
       if (counts[v] === undefined) { counts[v] = 0; list.push(v); }
@@ -947,6 +985,7 @@ function toHtml(rows, meta, opts) {
       else btn.textContent = picked[0] + '、' + picked[1] + ' 等 ' + picked.length + ' 项';
     }
     function setAll(on) {
+      ensureAll();
       Object.keys(boxes).forEach(function (v) {
         boxes[v].checked = on;
         if (on) state.sel[v] = 1; else delete state.sel[v];
@@ -968,6 +1007,7 @@ function toHtml(rows, meta, opts) {
       pop.appendChild(item);
       boxes[v] = cb;
       cb.addEventListener('change', function () {
+        ensureAll();
         if (cb.checked) state.sel[v] = 1; else delete state.sel[v];
         state.active = Object.keys(state.sel).length;
         refreshLabel();
@@ -1012,11 +1052,12 @@ function toHtml(rows, meta, opts) {
       if (el.style.display !== want) el.style.display = want;
       if (ok) n++;
     }
-    cnt.textContent = '显示 ' + n + ' / ' + rows.length + ' 条';
+    cnt.textContent = '显示 ' + n + ' / ' + totalRows + ' 条' + (allLoaded ? '' : '（点击加载全部）');
   }
   // 输入时别每敲一个字就全表扫描（几百行 × 长结论文字）：停 140ms 再过滤
   var searchTimer = null;
   q.addEventListener('input', function () {
+    ensureAll();
     if (searchTimer) clearTimeout(searchTimer);
     searchTimer = setTimeout(apply, 140);
   });
@@ -1042,6 +1083,7 @@ function toHtml(rows, meta, opts) {
   for (var t = 0; t < ths.length; t++) {
     (function (th) {
       th.addEventListener('click', function () {
+        ensureAll();
         var key = th.getAttribute('data-sort');
         sortDir = (sortKey === key && sortDir === -1) ? 1 : -1;
         sortKey = key;
@@ -1069,6 +1111,7 @@ function toHtml(rows, meta, opts) {
     '<div class=' + Q + 'tw' + Q + '><table>' + colgroup + '<thead><tr>' + th + '</tr></thead><tbody>',
     body,
     '</tbody></table></div>',
+    deferredBody ? '<button id=' + Q + 'loadMore' + Q + ' class=' + Q + 'load-more' + Q + ' type=' + Q + 'button' + Q + '>加载剩余 ' + (rows.length - Math.min(initialLimit, rows.length)) + ' 条</button>' : '',
     script,
     CARD_SCRIPT,
     '</body></html>',

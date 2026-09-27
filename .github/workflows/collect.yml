@@ -75,6 +75,8 @@ jobs:
           # 延续历次盘前、早盘、午盘和收盘复盘；页面每轮行情发布时一并更新。
           curl -fsSL --retry 2 https://yunqingzou-bit.github.io/cls-news-dashboard/market-review.json -o out/market-review.json || true
           curl -fsSL --retry 2 https://yunqingzou-bit.github.io/cls-news-dashboard/market-review/ -o out/previous-market-review.html || true
+          # 多来源市场新闻历史缓存；外部站点临时不可用时保留上一轮资讯。
+          curl -fsSL --retry 2 https://yunqingzou-bit.github.io/cls-news-dashboard/market-news.json -o out/market-news.json || true
           # 新闻抓取失败时，用线上上一版行数据重新渲染当前代码生成的页面，避免数据源抖动阻断发布。
           curl -fsSL --retry 2 https://yunqingzou-bit.github.io/cls-news-dashboard/news.json -o out/previous-news.json || true
           # 明星看点的历史留档：线上已有就以线上为准（每天 20:00 重算并覆盖当天）
@@ -97,6 +99,11 @@ jobs:
             echo "WARN: 新闻源本轮抓取失败，使用线上上一版行数据，用当前代码继续渲染页面。"
             node tools/render-fallback.js
           fi
+
+      - name: 聚合多来源公开市场资讯
+        env:
+          TZ: Asia/Shanghai
+        run: node tools/market-news.js
 
       - name: 更新盘前及分时市场复盘
         env:
@@ -127,6 +134,7 @@ jobs:
           cp out/cls-news-cards.html  _site/cards/index.html
           cp market-review/index.html _site/market-review/index.html
           if [ -s out/market-review.json ]; then cp out/market-review.json _site/market-review.json; fi
+          if [ -s out/market-news.json ]; then cp out/market-news.json _site/market-news.json; fi
           cp out/cls-news-latest.csv  _site/news.csv
           cp out/cls-news-latest.json _site/news.json
           cp out/status.json          _site/status.json

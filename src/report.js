@@ -862,7 +862,10 @@ function toHtml(rows, meta, opts) {
   const initialLimit = layout === 'cards' ? 40 : 60;
   const rowHtmlList = rows.map(rowHtml);
   const body = rowHtmlList.slice(0, initialLimit).join('\n');
-  const deferredBody = rowHtmlList.slice(initialLimit).join('\n');
+  const deferredParts = [];
+  for (let i = initialLimit; i < rowHtmlList.length; i += initialLimit) {
+    deferredParts.push(rowHtmlList.slice(i, i + initialLimit).join('\n'));
+  }
   const filterOptionMap = {};
   ['data-prefix', 'data-date', 'data-play', 'data-trend'].forEach(function (attr) {
     const counts = {};
@@ -891,18 +894,21 @@ function toHtml(rows, meta, opts) {
 (function(){
   var rows = [].slice.call(document.querySelectorAll('tbody tr'));
   var totalRows = ${rows.length};
-  var deferredHtml = ${JSON.stringify(deferredBody)};
-  var allLoaded = !deferredHtml;
+  var deferredParts = ${JSON.stringify(deferredParts)};
+  var allLoaded = !deferredParts.length;
   var loadMore = document.getElementById('loadMore');
   function ensureAll(){
     if (allLoaded) return;
     var bodyEl = document.querySelector('tbody');
-    if (bodyEl) bodyEl.insertAdjacentHTML('beforeend', deferredHtml);
-    deferredHtml = '';
-    allLoaded = true;
+    var nextPart = deferredParts.shift();
+    if (bodyEl && nextPart) bodyEl.insertAdjacentHTML('beforeend', nextPart);
+    allLoaded = !deferredParts.length;
     rows = [].slice.call(document.querySelectorAll('tbody tr'));
     searchText = null;
-    if (loadMore) loadMore.remove();
+    if (loadMore) {
+      if (allLoaded) loadMore.remove();
+      else loadMore.textContent = '继续加载下一批（剩余 ' + (totalRows - rows.length) + ' 条）';
+    }
   }
   if (loadMore) loadMore.addEventListener('click', ensureAll);
   var q = document.getElementById('q');
@@ -1052,7 +1058,7 @@ function toHtml(rows, meta, opts) {
       if (el.style.display !== want) el.style.display = want;
       if (ok) n++;
     }
-    cnt.textContent = '显示 ' + n + ' / ' + totalRows + ' 条' + (allLoaded ? '' : '（点击加载全部）');
+    cnt.textContent = '显示 ' + n + ' / ' + totalRows + ' 条' + (allLoaded ? '' : '（点击加载下一批）');
   }
   // 输入时别每敲一个字就全表扫描（几百行 × 长结论文字）：停 140ms 再过滤
   var searchTimer = null;
@@ -1111,7 +1117,7 @@ function toHtml(rows, meta, opts) {
     '<div class=' + Q + 'tw' + Q + '><table>' + colgroup + '<thead><tr>' + th + '</tr></thead><tbody>',
     body,
     '</tbody></table></div>',
-    deferredBody ? '<button id=' + Q + 'loadMore' + Q + ' class=' + Q + 'load-more' + Q + ' type=' + Q + 'button' + Q + '>加载剩余 ' + (rows.length - Math.min(initialLimit, rows.length)) + ' 条</button>' : '',
+    deferredParts.length ? '<button id=' + Q + 'loadMore' + Q + ' class=' + Q + 'load-more' + Q + ' type=' + Q + 'button' + Q + '>加载下一批 ' + Math.min(initialLimit, rows.length - initialLimit) + ' 条（剩余 ' + (rows.length - initialLimit) + ' 条）</button>' : '',
     script,
     CARD_SCRIPT,
     '</body></html>',

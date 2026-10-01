@@ -32,7 +32,6 @@ def collect_ashare(errors):
             return rows
         raise RuntimeError("Ashare 返回空数据")
     except Exception as e:
-        errors.append("ashare: "+str(e))
         # Ashare 历史接口偶尔被上游限流；用本轮已采集的指数快照兜底，避免页面空白。
         try:
             with open("data/market.json", encoding="utf-8") as f: market = json.load(f)
@@ -42,7 +41,9 @@ def collect_ashare(errors):
                          "close": index.get("px"), "high": None, "low": None,
                          "pct": index.get("pct"), "source": "market.json 实时快照兜底"}]
         except Exception as fallback_error:
+            errors.append("ashare: "+str(e))
             errors.append("ashare fallback: "+str(fallback_error))
+        errors.append("ashare: 历史接口返回空数据，未找到实时快照兜底")
         return []
 
 def collect_hithink(errors):

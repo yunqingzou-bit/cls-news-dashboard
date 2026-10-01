@@ -14,7 +14,7 @@ def main():
         try: out[key]=norm(getattr(lk,name)()) if lk else []
         except Exception as e: out[key]=[]; errors.append(key+": "+str(e))
     out["ashare"] = collect_ashare(errors)
-    out["hithink"] = {"configured": bool(os.environ.get("HITHINK_API_URL")), "message": "等待 GitHub Secret 配置" if not os.environ.get("HITHINK_API_URL") else "已配置，待接口采集"}
+    out["hithink"] = collect_hithink(errors)
     out.update(generated_at=dt.datetime.now(dt.timezone(dt.timedelta(hours=8))).isoformat(timespec="seconds"),trade_date=dt.date.today().isoformat(),errors=errors)
     os.makedirs("data",exist_ok=True)
     with open(OUT,"w",encoding="utf-8") as f: json.dump(out,f,ensure_ascii=False,separators=(",",":"))
@@ -27,5 +27,21 @@ def collect_ashare(errors):
     except Exception as e:
         errors.append("ashare: "+str(e))
         return []
+
+def collect_hithink(errors):
+    key = os.environ.get("HITHINK_FINANCE_API_KEY")
+    if not key:
+        return {"configured": False, "message": "等待 HITHINK_FINANCE_API_KEY"}
+    try:
+        import urllib.parse, urllib.request
+        base = os.environ.get("HITHINK_API_URL", "https://fuyao.aicubes.cn/api/a-share/prices/snapshot")
+        url = base + ("&" if "?" in base else "?") + urllib.parse.urlencode({"thscodes": "600519.SH"})
+        req = urllib.request.Request(url, headers={"X-api-key": key, "Accept": "application/json"})
+        with urllib.request.urlopen(req, timeout=20) as res:
+            payload = json.loads(res.read().decode("utf-8"))
+        return {"configured": True, "message": "API 调用成功", "sample": norm(payload)}
+    except Exception as e:
+        errors.append("hithink: "+str(e))
+        return {"configured": True, "message": "API 调用失败", "sample": {}}
 
 if __name__=="__main__": main()

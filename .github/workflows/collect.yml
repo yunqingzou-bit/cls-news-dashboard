@@ -108,6 +108,7 @@ jobs:
       - name: 采集 levistock A 股研究底座
         env:
           TZ: Asia/Shanghai
+          HITHINK_FINANCE_API_KEY: ${{ secrets.HITHINK_FINANCE_API_KEY }}
         run: |
           python -m pip install --disable-pip-version-check --quiet git+https://github.com/fleetinglife/levistock.git
           curl -fsSL --retry 2 https://raw.githubusercontent.com/mpquant/Ashare/master/Ashare.py -o tools/Ashare.py

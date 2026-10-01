@@ -748,6 +748,11 @@ const CSS_BASE = "body{font-family:'Microsoft YaHei',system-ui,sans-serif;margin
 // 本看板各版本 + 数据文件 + 同账号下其他看板。全部用绝对地址，任何页面、本地打开都能直接点。
 const SITE_BASE = 'https://yunqingzou-bit.github.io/';
 const NAV_GROUPS = [
+  { label: 'A股研究底座', items: [
+    { label: 'levistock 数据 SDK', href: 'https://github.com/fleetinglife/levistock', title: '财联社、东方财富、同花顺、问财等 A 股数据接口', newTab: true },
+    { label: 'Ashare 行情接口', href: 'https://github.com/mpquant/Ashare', title: 'A 股实时行情、历史 K 线和分时数据', newTab: true },
+    { label: 'HiThink 金融 API', href: 'https://github.com/HiThink-Tech/Financial-API', title: '同花顺官方金融数据 API / MCP / CLI（需自行配置授权）', newTab: true },
+  ] },
   { label: '财联社工具箱', items: [
     { label: '财联社数据 SDK', href: 'https://github.com/fleetinglife/levistock', title: 'levistock：封装财联社、东方财富、同花顺、问财等 A 股数据接口', newTab: true },
     { label: '财联社电报 CLI', href: 'https://github.com/InphinitiZ/cls-telegraph', title: 'cls-telegraph：电报获取、筛选、JSON 输出与实时监控', newTab: true },

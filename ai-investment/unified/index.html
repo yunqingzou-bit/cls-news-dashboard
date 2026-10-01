@@ -24,11 +24,11 @@ const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 const val=(x,ks)=>{for(const k of ks){if(x&&x[k]!==undefined&&x[k]!==null&&String(x[k]).trim())return x[k]}return ''};
 const text=x=>String(val(x,['content','text','summary','description','title','headline'])||'');
 const title=x=>String(val(x,['title','headline','name'])||text(x).slice(0,80)||'未命名新闻');
-const level=x=>String(val(x,['level','importance','grade','news_level'])||'').toUpperCase().replace('等级','');
+const level=x=>{const explicit=String(val(x,['level','importance','grade','news_level'])||'').toUpperCase().replace('等级','');if(explicit)return explicit;const s=(title(x)+' '+text(x)).toLowerCase();if(/重大|重磅|国务院|央行|降息|政策|获批|核准|制裁|战争|暴涨|暴跌|涨停|跌停|业绩预告|并购|回购/.test(s))return 'B';if(/签约|订单|中标|发布|合作|增持|减持|扩产|投产|融资|营收|净利润|出口|价格/.test(s))return 'C';return '';};
 const time=x=>String(val(x,['time','publish_time','published_at','date','created_at','datetime'])||'—');
 const link=x=>String(val(x,['url','link','article_url','source_url'])||'');
 const stock=x=>val(x,['stock','stocks','stockName','stock_name','stockCode','stock_code','related_stocks']);
-const topicsOf=x=>{let raw=val(x,['topic','topics','prefix','category','tags','sector','industry']);let s=Array.isArray(raw)?raw.join(' '):String(raw||'');return topics.filter(t=>(s+' '+title(x)+' '+text(x)).includes(t))};
+const topicsOf=x=>{let raw=val(x,['topic','topics','prefix','category','tags','sector','industry']);let s=Array.isArray(raw)?raw.join(' '):String(raw||'');const full=s+' '+title(x)+' '+text(x),extra=['创新药','生物医药','化学制药','房地产','银行','证券','保险','食品饮料','白酒','汽车','新能源汽车','光伏','储能','半导体','PCB','通信','卫星互联网','军工','低空经济','机器人','人工智能','算力','数据中心','消费电子','有色金属','黄金','石油','煤炭','电力','环保','传媒','游戏','海外市场','宏观经济'];return [...new Set([...topics,...extra].filter(t=>full.includes(t)))]};
 const flat=d=>Array.isArray(d)?d:(d&&Array.isArray(d.rows)?d.rows:(d&&Array.isArray(d.news)?d.news:(d&&Array.isArray(d.items)?d.items:[])));
 function dedup(a){const seen=new Set();return a.filter(x=>{const k=String(val(x,['id','url','link','title','content','text'])||JSON.stringify(x));if(seen.has(k))return false;seen.add(k);return true})}
 function render(){const q=$('search').value.trim().toLowerCase(),lv=$('level').value,tp=$('topic').value;filtered=all.filter(x=>{const hay=(title(x)+' '+text(x)+' '+JSON.stringify(stock(x))+' '+topicsOf(x).join(' ')).toLowerCase();const l=level(x);return(!q||hay.includes(q))&&(!lv||(lv==='unknown'?!l:l===lv))&&(!tp||topicsOf(x).includes(tp))});shown=0;draw();$('resultCount').textContent=`新闻明细：${filtered.length} 条（已显示 ${Math.min(pageSize,filtered.length)} 条）`}

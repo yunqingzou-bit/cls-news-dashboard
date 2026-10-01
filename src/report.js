@@ -128,7 +128,21 @@ function toCsv(rows) {
 }
 
 function esc(v) {
-  return String(v === null || v === undefined ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return String(v === null || v === undefined ? '' : v)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function quoteUrl(code) {
+  return 'https://gu.qq.com/' + encodeURIComponent(String(code || ''));
+}
+
+/** JSON 嵌入 HTML 时转义左尖括号，防止新闻文本里的 </script> 提前闭合数据块。 */
+function safeJson(value) {
+  return JSON.stringify(value)
+    .replace(/</g, '\\u003c')
+    .replace(/\u2028/g, '\\u2028')
+    .replace(/\u2029/g, '\\u2029');
 }
 
 const RESEARCH_LABEL_RE = /(题材|估值(?:（截至[^）]+）)?|未来三个月潜力|目前大事|未来三个月|股东动向|短线博弈)：/g;
@@ -293,7 +307,7 @@ function outlookHtml(card, opts) {
   const picks = o.picks || [];
   const pickRows = picks.map(function (p, i) {
     return '<div class="mk-row"><span class="mk-rank' + (i < 3 ? ' top' : '') + '">' + (i + 1) + '</span>' +
-      '<a class="mk-link" href=' + Q + 'https://quote.eastmoney.com/' + encodeURIComponent(p.code) + '.html' + Q +
+      '<a class="mk-link" href=' + Q + quoteUrl(p.code) + Q +
       ' target=' + Q + '_blank' + Q + ' rel=' + Q + 'noopener noreferrer' + Q + '>' + esc(p.name) + '</a>' +
       '<span class="mk-meta">' + (p.theme ? esc(outlookShort(p.theme)) : '—') + '</span>' +
       '<span class="mk-p ' + mkCls(p.pct) + '">' + mkPct(p.pct) + (p.limitUp ? ' 涨停' : '') + '</span>' +
@@ -431,7 +445,7 @@ function marketCardHtml(card, opts) {
 
   const hotRow = function (x, i) {
     return '<div class="mk-row"><span class="mk-rank' + (i < 3 ? ' top' : '') + '">' + (i + 1) + '</span>' +
-      '<a class="mk-link" href=' + Q + 'https://quote.eastmoney.com/' + encodeURIComponent(x.code) + '.html' + Q +
+      '<a class="mk-link" href=' + Q + quoteUrl(x.code) + Q +
       ' target=' + Q + '_blank' + Q + ' rel=' + Q + 'noopener noreferrer' + Q + '>' + esc(x.name) + '</a>' +
       '<span class="mk-p ' + mkCls(x.pct) + '">' + mkPct(x.pct) + '</span>' +
       '<span class="mk-fund">' + mkYi(x.fundYi) + '</span></div>';
@@ -734,6 +748,12 @@ const CSS_BASE = "body{font-family:'Microsoft YaHei',system-ui,sans-serif;margin
 // 本看板各版本 + 数据文件 + 同账号下其他看板。全部用绝对地址，任何页面、本地打开都能直接点。
 const SITE_BASE = 'https://yunqingzou-bit.github.io/';
 const NAV_GROUPS = [
+  { label: '财联社工具箱', items: [
+    { label: '财联社数据 SDK', href: 'https://github.com/fleetinglife/levistock', title: 'levistock：封装财联社、东方财富、同花顺、问财等 A 股数据接口', newTab: true },
+    { label: '财联社电报 CLI', href: 'https://github.com/InphinitiZ/cls-telegraph', title: 'cls-telegraph：电报获取、筛选、JSON 输出与实时监控', newTab: true },
+    { label: '电报板块分析', href: 'https://github.com/wanyawan/cls-telegraph-analyzer', title: '按小时聚合财联社电报并分析板块影响与情绪', newTab: true },
+    { label: '飞书推送机器人', href: 'https://github.com/z562261070/Cailianpress-Feishu-Bot', title: '财联社资讯抓取、市场复盘与飞书推送', newTab: true },
+  ] },
   { label: '本看板', items: [
     { label: '明日关注个股明细', href: SITE_BASE + 'cls-news-dashboard/outlook/', title: '明日看点关注个股的历史明细表' },
     { label: '新闻看板个股明细', href: SITE_BASE + 'cls-news-dashboard/stocks/', title: '财联社新闻股票看板 · 个股表现的历史明细表' },
@@ -839,9 +859,9 @@ function toHtml(rows, meta, opts) {
   const rowHtml = function (r) {
     const stockText = esc(r.stock || r.stocks);
     const stockHtml = r.stockCode
-      ? '<a href=' + Q + 'https://quote.eastmoney.com/' + encodeURIComponent(r.stockCode) + '.html' + Q +
+      ? '<a href=' + Q + quoteUrl(r.stockCode) + Q +
         ' target=' + Q + '_blank' + Q + ' rel=' + Q + 'noopener noreferrer' + Q +
-        ' title=' + Q + '在东方财富查看行情与K线' + Q + '>' + stockText + '</a>'
+        ' title=' + Q + '在腾讯行情查看行情与K线' + Q + '>' + stockText + '</a>'
       : stockText;
     return '<tr data-prefix=' + Q + esc(r.prefix) + Q +
       ' data-date=' + Q + esc(String(r.time || '').slice(0, 10)) + Q +
@@ -862,18 +882,24 @@ function toHtml(rows, meta, opts) {
       '<td class=' + Q + 'tech' + Q + ' data-label=' + Q + '技术面结论' + Q + '>' + technicalHtml(r.technicalConclusion) + '</td>' +
       '</tr>';
   };
-  // 只把首批行放进 DOM；完整行数据留给客户端分页、搜索、筛选和排序。
+  // 只把首批行放进 DOM；其余行以紧凑原始字段保存，按需在浏览器端生成。
+  // 旧实现把每行完整 HTML（含大量重复标签）和新闻正文再次嵌入脚本，页面会膨胀到 5MB 左右。
   const initialLimit = layout === 'cards' ? 40 : 60;
-  const rowHtmlList = rows.map(rowHtml);
-  const body = rowHtmlList.slice(0, initialLimit).join('\n');
-  const clientRows = rows.map(function (r, i) {
+  const body = rows.slice(0, initialLimit).map(rowHtml).join('\n');
+  const nullable = function (v) { return v === undefined ? null : v; };
+  const clientRows = rows.map(function (r) {
+    const fw = r.forward || null;
     return {
-      h: rowHtmlList[i], p: String(r.prefix || ''), d: String(r.time || '').slice(0, 10),
+      i: String(r.time || ''), d: String(r.time || '').slice(0, 10),
+      n: String(r.stock || r.stocks || ''), c: String(r.stockCode || ''),
+      p: String(r.prefix || ''), l: String(r.title || ''), u: String(r.url || ''),
+      a: [nullable(r.m5), nullable(r.m30), nullable(r.m120), nullable(r.refPx)],
+      y: [nullable(r.open), nullable(r.close), nullable(r.changePct), nullable(r.prevClose), nullable(r.maxAbsChange)],
+      f: fw ? [nullable(fw.d0), nullable(fw.close0), (fw.t || []).slice(0, 5).map(nullable)] : null,
       b: playFrom(r.researchConclusion), g: trendFrom(r.technicalConclusion),
       t: r.turnover === null || r.turnover === undefined ? null : Number(r.turnover),
       v: r.volRatioPct === null || r.volRatioPct === undefined ? null : Number(r.volRatioPct),
-      // 正文虽不显示为单独一列，仍保留在搜索范围内。
-      x: String(r.text || ''),
+      r: String(r.researchConclusion || ''), k: String(r.technicalConclusion || ''),
     };
   });
   const filterOptionMap = {};
@@ -891,7 +917,7 @@ function toHtml(rows, meta, opts) {
   });
   const toolbar = [
     '<div class=' + Q + 'bar' + Q + '>',
-    '<input id=' + Q + 'q' + Q + ' type=' + Q + 'search' + Q + ' placeholder=' + Q + '搜索股票、标题或正文…' + Q + '>',
+    '<input id=' + Q + 'q' + Q + ' type=' + Q + 'search' + Q + ' placeholder=' + Q + '搜索股票、标题或结论…' + Q + '>',
     // 四个筛选器都改成可多选的复选下拉，data-* 让脚本自己认领
     '<div class=' + Q + 'msel' + Q + ' data-msel=' + Q + 'data-prefix' + Q + ' data-options=' + Q + esc(JSON.stringify(filterOptionMap['data-prefix'])) + Q + ' data-label=' + Q + '全部栏目' + Q + '></div>',
     '<div class=' + Q + 'msel' + Q + ' data-msel=' + Q + 'data-date' + Q + ' data-options=' + Q + esc(JSON.stringify(filterOptionMap['data-date'])) + Q + ' data-label=' + Q + '全部日期' + Q + '></div>',
@@ -900,43 +926,161 @@ function toHtml(rows, meta, opts) {
     '<span class=' + Q + 'cnt' + Q + ' id=' + Q + 'cnt' + Q + '></span>',
     '</div>',
   ].join('');
-  const script = '<script>' + `
+  const script = '<script>' + String.raw`
 (function(){
-  var allRows = ${JSON.stringify(clientRows)};
+  var dataNode = document.getElementById('rowData');
+  var allRows = [];
+  try { allRows = JSON.parse(dataNode && dataNode.textContent || '[]'); } catch (e) { console.error('表格数据解析失败', e); }
   var totalRows = allRows.length;
   var pageSize = ${initialLimit};
-  var shown = 0;
+  var shown = Math.min(pageSize, totalRows);
   var matches = allRows;
-  var tbody = document.querySelector('tbody');
+  var tbody = document.getElementById('newsRows');
   var loadMore = document.getElementById('loadMore');
+  var q = document.getElementById('q');
+  var cnt = document.getElementById('cnt');
+  function h(v) {
+    return String(v === null || v === undefined ? '' : v)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+  function pct(v) { return v === null || v === undefined ? '' : (Number(v) > 0 ? '+' : '') + Number(v).toFixed(2) + '%'; }
+  function num(v) { return v === null || v === undefined ? '' : Number(v).toFixed(2); }
+  function nAttr(v) { return v === null || v === undefined || !isFinite(Number(v)) ? '' : String(Number(v)); }
+  function afterText(r) {
+    var a = r.a || [], out = [];
+    if (a[0] !== null && a[0] !== undefined) out.push('+5m ' + pct(a[0]));
+    if (a[1] !== null && a[1] !== undefined) out.push('+30m ' + pct(a[1]));
+    if (a[2] !== null && a[2] !== undefined) out.push('+2h ' + pct(a[2]));
+    if (out.length) return out.join('  ');
+    return a[3] === null || a[3] === undefined ? '—' : '—（已收盘/数据不足）';
+  }
+  function inferLimit(code, name, maxAbs) {
+    if (/^sz30/.test(code || '') || /^sh688/.test(code || '')) return 20;
+    if (/ST/i.test(name || '') && maxAbs !== null && maxAbs !== undefined && maxAbs <= 5.6) return 5;
+    return 10;
+  }
+  function isLimitUp(r) {
+    var y = r.y || [], close = y[1], change = y[2], prevClose = y[3], maxAbs = y[4];
+    if (close === null || close === undefined || !prevClose || change === null || change === undefined || /^[NC]/.test(r.n || '')) return false;
+    var limit = inferLimit(r.c, r.n, maxAbs);
+    if (Math.abs(change - limit) > 1.2) return false;
+    return close >= Math.round(prevClose * (1 + limit / 100) * 100) / 100 - 0.005;
+  }
+  function dayHtml(r) {
+    var y = r.y || [], out = [];
+    if (y[0] !== null && y[0] !== undefined) out.push('开 ' + num(y[0]));
+    if (y[1] !== null && y[1] !== undefined) out.push('收 ' + num(y[1]));
+    if (y[2] !== null && y[2] !== undefined) {
+      var text = '日 ' + pct(y[2]);
+      if (isLimitUp(r)) out.push('<span class="up-limit">' + text + ' 涨停</span>');
+      else if (y[2] > 5) out.push('<span class="up-strong">' + text + '</span>');
+      else out.push(text);
+    }
+    return out.length ? out.join('  ') : '—';
+  }
+  function forwardHtml(r) {
+    if (!r.f) return '—';
+    var values = r.f[2] || [];
+    function item(label, value, extra) {
+      var key = '<strong class="research-key">' + label + '</strong>';
+      if (value === null || value === undefined) return '<div class="research-item">' + key + '待更新</div>';
+      var cls = value > 0 ? 'f-up' : value < 0 ? 'f-down' : '';
+      var text = pct(value) + (extra || '');
+      return '<div class="research-item">' + key + (cls ? '<span class="' + cls + '">' + text + '</span>' : text) + '</div>';
+    }
+    var out = [item('当天', r.f[0], r.f[1] ? '（收 ' + num(r.f[1]) + '）' : '')];
+    for (var i = 0; i < 5; i++) out.push(item('T+' + (i + 1), values[i]));
+    return out.join('');
+  }
+  function turnLevel(v) { return v > 20 ? 'v-red' : v >= 15 ? 'v-blue' : v >= 10 ? 'v-green' : ''; }
+  function volLevel(v) { return v > 40 ? 'v-red' : v >= 30 ? 'v-blue' : v >= 20 ? 'v-green' : ''; }
+  var researchLabel = /(题材|估值(?:（截至[^）]+）)?|未来三个月潜力|目前大事|未来三个月|股东动向|短线博弈)：/g;
+  var researchPlayRisk = /(追高风险|超买|缩量|走弱|不适合|空头排列)/g;
+  var researchRisk = /(利润同比下滑|营收承压|盈利为负\/PE失真|估值较高|负面公告事项|退市风险)/g;
+  var researchEvent = /(重大资产重组|重大合同|控制权变更|发行股份|收购|重组|中标|立案|行政处罚|诉讼|股权质押|股份质押|解除限售|限售股|增减持|增持|减持|回购)/g;
+  var techLabel = /(趋势|位置|量能|关键位|倾向)：/g;
+  var techRisk = /(下降趋势|下降末段|破位|跌破|假突破|偏空|超买|放量下跌|放量滞涨|失守|转弱|受制于|区间震荡)/g;
+  function splitHighlight(value, re) {
+    if (!re) return h(value);
+    re.lastIndex = 0;
+    return String(value).split(re).map(function (part, i) { return i % 2 ? '<span class="research-impact">' + h(part) + '</span>' : h(part); }).join('');
+  }
+  function labelledHtml(value, labelRe, render) {
+    var source = String(value || '—').replace(/\r?\n/g, ' ').trim(), fields = [], match;
+    labelRe.lastIndex = 0;
+    while ((match = labelRe.exec(source)) !== null) fields.push({ label: match[1], index: match.index, start: labelRe.lastIndex });
+    if (!fields.length) return h(source);
+    return fields.map(function (field, i) {
+      var end = i + 1 < fields.length ? fields[i + 1].index : source.length;
+      var text = source.slice(field.start, end).replace(/^[\s。]+|[\s。]+$/g, '');
+      var body = render(field.label, text);
+      return '<div class="research-item"><strong class="research-key">' + h(field.label) + '：</strong>' + (body.indexOf('<') >= 0 ? '<span>' + body + '</span>' : body) + '</div>';
+    }).join('');
+  }
+  function highlightedResearchValue(label, value) {
+    if (label === '短线博弈') {
+      if (/^不适合/.test(value)) return '<span class="research-impact">' + h(value) + '</span>';
+      return splitHighlight(value, researchPlayRisk);
+    }
+    researchEvent.lastIndex = 0;
+    var hasEvent = researchEvent.test(value);
+    researchEvent.lastIndex = 0;
+    var major = (label === '目前大事' && hasEvent) || (label === '股东动向' && !/未检索到|待下一轮/.test(value) && hasEvent);
+    if (major) return '<span class="research-impact">' + h(value) + '</span>';
+    return splitHighlight(value, label === '未来三个月潜力' ? researchRisk : label === '未来三个月' ? researchEvent : null);
+  }
+  function researchHtml(value) { return labelledHtml(value, researchLabel, highlightedResearchValue); }
+  function technicalHtml(value) {
+    return labelledHtml(value, techLabel, function (label, text) {
+      if (label === '倾向' && /偏空/.test(text)) return '<span class="research-impact">' + h(text) + '</span>';
+      return splitHighlight(text, label === '趋势' || label === '量能' ? techRisk : null);
+    });
+  }
+  function rowHtml(r) {
+    var stock = h(r.n);
+    var stockHtml = r.c ? '<a href="https://gu.qq.com/' + encodeURIComponent(r.c) + '" target="_blank" rel="noopener noreferrer" title="在腾讯行情查看行情与K线">' + stock + '</a>' : stock;
+    return '<tr data-prefix="' + h(r.p) + '" data-date="' + h(r.d) + '" data-turn="' + nAttr(r.t) + '" data-vol="' + nAttr(r.v) + '" data-play="' + h(r.b) + '" data-trend="' + h(r.g) + '">' +
+      '<td class="t" data-label="新闻发布时间">' + h(r.i) + '</td>' +
+      '<td data-label="涉及股票">' + stockHtml + '</td>' +
+      '<td data-label="前缀类型"><span class="pf">' + h(r.p) + '</span></td>' +
+      '<td data-label="新闻标题"><a href="' + h(r.u) + '" target="_blank" rel="noopener noreferrer">' + h(r.l) + '</a></td>' +
+      '<td class="perf" data-label="发布后表现">' + h(afterText(r)) + '</td>' +
+      '<td class="day" data-label="当日行情">' + dayHtml(r) + '</td>' +
+      '<td class="fwd" data-label="后续走势">' + forwardHtml(r) + '</td>' +
+      '<td class="turn ' + turnLevel(r.t) + '" data-label="换手率">' + (r.t === null ? '—' : h(num(r.t) + '%')) + '</td>' +
+      '<td class="vol ' + volLevel(r.v) + '" data-label="量较前日">' + (r.v === null ? '—' : h(pct(r.v))) + '</td>' +
+      '<td class="research" data-label="调研结论">' + researchHtml(r.r) + '</td>' +
+      '<td class="tech" data-label="技术面结论">' + technicalHtml(r.k) + '</td></tr>';
+  }
+  function updateLoadMore() {
+    if (!loadMore) return;
+    loadMore.hidden = shown >= matches.length;
+    loadMore.textContent = '加载下一批（剩余 ' + Math.max(0, matches.length - shown) + ' 条）';
+  }
+  function updateCount() {
+    if (cnt) cnt.textContent = '显示 ' + shown + ' / 匹配 ' + matches.length + ' / 总计 ' + totalRows + ' 条';
+  }
   function showNext(){
     var next = matches.slice(shown, shown + pageSize);
-    if (next.length) tbody.insertAdjacentHTML('beforeend', next.map(function (r) { return r.h; }).join(''));
+    if (next.length && tbody) tbody.insertAdjacentHTML('beforeend', next.map(rowHtml).join(''));
     shown += next.length;
-    if (loadMore) {
-      loadMore.hidden = shown >= matches.length;
-      loadMore.textContent = '加载下一批（剩余 ' + (matches.length - shown) + ' 条）';
-    }
+    updateLoadMore();
     updateCount();
   }
   if (loadMore) loadMore.addEventListener('click', showNext);
-  var q = document.getElementById('q');
-  var cnt = document.getElementById('cnt');
   var hint = document.getElementById('hint');
   if (hint && screen && screen.width && screen.width <= 760) {
     hint.textContent = '已按屏幕整页适配：双指缩放或双击可放大查看细节';
     hint.style.display = 'block';
   }
   ${phoneHook}
-  if (!allRows.length || !q) return;
+  if (!allRows.length || !q || !tbody) { updateLoadMore(); updateCount(); return; }
   var initialQuery = new URLSearchParams(location.search).get('q');
   if (initialQuery) q.value = initialQuery;
   function searchable(r) {
-    if (!r.s) r.s = (r.h.replace(/<[^>]*>/g, ' ') + ' ' + r.x).toLowerCase();
+    if (!r.s) r.s = [r.n, r.p, r.l, r.r, r.k].join(' ').toLowerCase();
     return r.s;
-  }
-  function updateCount() {
-    cnt.textContent = '显示 ' + shown + ' / 匹配 ' + matches.length + ' / 总计 ' + totalRows + ' 条';
   }
   // 多选筛选：每个筛选器是一个复选下拉，可以同时勾多个值；不勾 = 该项不过滤
   function closeAll() {
@@ -1096,7 +1240,9 @@ function toHtml(rows, meta, opts) {
       });
     })(ths[t]);
   }
-  apply();
+  // 无初始搜索条件时保留服务端生成的首批行，避免加载后立即清空再重绘。
+  if (initialQuery) apply();
+  else { updateLoadMore(); updateCount(); }
 })();
 ` + '<' + '/script>';
   return [
@@ -1111,10 +1257,11 @@ function toHtml(rows, meta, opts) {
     marketCardHtml(meta.card, opts),
     newsBoardHtml(rows, opts),
     toolbar,
-    '<div class=' + Q + 'tw' + Q + '><table>' + colgroup + '<thead><tr>' + th + '</tr></thead><tbody>',
+    '<div class=' + Q + 'tw' + Q + '><table>' + colgroup + '<thead><tr>' + th + '</tr></thead><tbody id=' + Q + 'newsRows' + Q + '>',
     body,
     '</tbody></table></div>',
     rows.length > initialLimit ? '<button id=' + Q + 'loadMore' + Q + ' class=' + Q + 'load-more' + Q + ' type=' + Q + 'button' + Q + '>加载下一批（剩余 ' + (rows.length - initialLimit) + ' 条）</button>' : '',
+    '<script id=' + Q + 'rowData' + Q + ' type=' + Q + 'application/json' + Q + '>' + safeJson(clientRows) + '<' + '/script>',
     script,
     CARD_SCRIPT,
     '</body></html>',

@@ -62,12 +62,19 @@ def collect_hithink(errors):
 
 def flatten_items(value):
     if isinstance(value,list):
-        return [x for x in value if (isinstance(x,dict) and any(str(v).strip() for v in x.values() if isinstance(v,(str,int,float)))) or (not isinstance(x,dict) and str(x).strip())]
+        out=[]
+        for x in value:
+            if isinstance(x,dict): out.extend(flatten_items(x))
+            elif str(x).strip(): out.append(x)
+        return out
     if isinstance(value,dict):
+        # 接口返回的单条记录本身就是字典；不要把字段名误当成新闻标题。
+        record_keys={"title","headline","content","text","name","stock_name","secu_name","mainLine_desc","chance_desc","style_desc","url","link"}
+        if record_keys.intersection(value): return [value]
         out=[]
         for k,v in value.items():
             if isinstance(v,list): out.extend(flatten_items(v))
-            elif isinstance(v,dict): out.append(v)
+            elif isinstance(v,dict): out.extend(flatten_items(v))
             elif str(v).strip(): out.append({"title":str(k),"content":str(v)})
         return out
     return []

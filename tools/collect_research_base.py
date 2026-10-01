@@ -13,7 +13,19 @@ def main():
     for key,name in {"market_emotion":"market_emotion_cls","market_wind":"market_wind_cls","mainline":"market_mainline_cls","sector_industry":"sector_industry_cls","limit_up":"stock_zt_pool_cls","telegraph":"news_telegraph_cls"}.items():
         try: out[key]=norm(getattr(lk,name)()) if lk else []
         except Exception as e: out[key]=[]; errors.append(key+": "+str(e))
+    out["ashare"] = collect_ashare(errors)
+    out["hithink"] = {"configured": bool(os.environ.get("HITHINK_API_URL")), "message": "等待 GitHub Secret 配置" if not os.environ.get("HITHINK_API_URL") else "已配置，待接口采集"}
     out.update(generated_at=dt.datetime.now(dt.timezone(dt.timedelta(hours=8))).isoformat(timespec="seconds"),trade_date=dt.date.today().isoformat(),errors=errors)
     os.makedirs("data",exist_ok=True)
     with open(OUT,"w",encoding="utf-8") as f: json.dump(out,f,ensure_ascii=False,separators=(",",":"))
+def collect_ashare(errors):
+    try:
+        import Ashare
+        data = Ashare.get_price(code="sh.000001", frequency="1d", count=30)
+        if hasattr(data, "tail"): data = data.tail(10).reset_index().to_dict(orient="records")
+        return norm(data)
+    except Exception as e:
+        errors.append("ashare: "+str(e))
+        return []
+
 if __name__=="__main__": main()

@@ -137,13 +137,19 @@ def enrich_research_stocks(out):
         news = payload if isinstance(payload, list) else payload.get("rows", payload.get("news", []))
         def labels(row):
             return " ".join(str(row.get(k, "")) for k in ("name","plate_name","secu_name","stock_name","title","content","mainLine_desc","chance_desc","style_desc"))
+        aliases={"创新药":["创新药","医药","制药"],"房地产":["房地产","地产","房企"],"白酒":["白酒","酒企"],"生物制品":["生物制品","生物医药","医药"],"化学制药":["化学制药","制药","医药"],"食品饮料行业":["食品饮料","食品","饮料"],"美容护理":["美容护理","美容","护肤"],"银行":["银行","银行业"],"机场":["机场","航空"],"医药":["医药","药品","制药"],"半导体":["半导体","芯片","集成电路"],"算力":["算力","服务器","数据中心"],"新能源":["新能源","光伏","储能","锂电"]}
         for key in ("market_wind", "sector_industry", "mainline"):
             for item in out.get(key, []):
                 if not isinstance(item, dict): continue
                 label = labels(item).strip()
+                terms=[label] if label else []
+                for alias, words in aliases.items():
+                    if alias in label: terms.extend(words)
                 found = {}
                 for row in news:
-                    if not isinstance(row, dict) or not label or label not in labels(row): continue
+                    if not isinstance(row, dict) or not terms: continue
+                    row_text=labels(row)
+                    if not any(term and term in row_text for term in terms): continue
                     code = str(row.get("stockCode") or row.get("stock_code") or "").strip()
                     name = str(row.get("stockName") or row.get("stock_name") or row.get("stock") or "").strip()
                     if code or name: found[code or name] = {"code": code, "name": name or code}

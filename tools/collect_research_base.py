@@ -52,14 +52,50 @@ def collect_hithink(errors):
     try:
         import urllib.parse, urllib.request
         base = os.environ.get("HITHINK_API_URL", "https://fuyao.aicubes.cn/api/a-share/prices/snapshot")
-        url = base + ("&" if "?" in base else "?") + urllib.parse.urlencode({"thscodes": "600519.SH"})
-        req = urllib.request.Request(url, headers={"X-api-key": key, "Accept": "application/json"})
-        with urllib.request.urlopen(req, timeout=20) as res:
-            payload = json.loads(res.read().decode("utf-8"))
-        return {"configured": True, "message": "API 调用成功", "sample": norm(payload)}
+        codes = hithink_news_codes()
+        batches = [codes[i:i+80] for i in range(0, len(codes), 80)] or [["600519.SH"]]
+        payloads=[]
+        for batch in batches:
+            url = base + ("&" if "?" in base else "?") + urllib.parse.urlencode({"thscodes": ",".join(batch)})
+            req = urllib.request.Request(url, headers={"X-api-key": key, "Accept": "application/json"})
+            with urllib.request.urlopen(req, timeout=30) as res:
+                payloads.append(json.loads(res.read().decode("utf-8")))
+        return {"configured": True, "message": "API 调用成功", "requested": len(codes), "sample": norm(merge_hithink_payloads(payloads))}
     except Exception as e:
         errors.append("hithink: "+str(e))
         return {"configured": True, "message": "API 调用失败", "sample": {}}
+
+def hithink_news_codes():
+    """提取看板新闻涉及的沪深股票，作为 HiThink 批量行情请求清单。"""
+    for source in ("out/cls-news-latest.json", "data/news.json"):
+        try:
+            if not os.path.exists(source): continue
+            with open(source, encoding="utf-8") as f: payload=json.load(f)
+            rows=payload if isinstance(payload,list) else payload.get("rows", payload.get("news", []))
+            out=[]
+            for row in rows:
+                vals=[row.get("stockCode"), row.get("stock_code"), row.get("code")]
+                vals += row.get("stockCodes", []) if isinstance(row.get("stockCodes"), list) else []
+                for code in vals:
+                    s=str(code or "").upper().replace(".","")
+                    if len(s)==8 and s[:2] in ("SH","SZ") and s[2:].isdigit(): out.append(s[:2]+s[2:]+".SH" if s[:2]=="SH" else s[:2]+s[2:]+".SZ")
+            return list(dict.fromkeys(out))
+        except Exception: pass
+    return []
+
+def merge_hithink_payloads(payloads):
+    if not payloads: return {}
+    first=payloads[0]
+    if len(payloads)==1: return first
+    root=first.get("data", first) if isinstance(first,dict) else {}
+    key=next((k for k in ("item","items","list") if isinstance(root.get(k),list)), "item")
+    merged=[]
+    for payload in payloads:
+        data=payload.get("data", payload) if isinstance(payload,dict) else {}
+        merged.extend(data.get(key,[]) if isinstance(data,dict) else [])
+    if isinstance(first,dict):
+        out=dict(first); out["data"]=dict(root); out["data"][key]=merged; return out
+    return first
 
 def flatten_items(value):
     if isinstance(value,list):

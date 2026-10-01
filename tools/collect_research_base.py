@@ -18,6 +18,7 @@ def main():
         except Exception as e: out[key]=[]; errors.append(key+": "+str(e))
     out["ashare"] = collect_ashare(errors)
     out["hithink"] = collect_hithink(errors)
+    enrich_research_stocks(out)
     out.update(generated_at=dt.datetime.now(dt.timezone(dt.timedelta(hours=8))).isoformat(timespec="seconds"),trade_date=dt.date.today().isoformat(),errors=errors)
     os.makedirs("data",exist_ok=True)
     with open(OUT,"w",encoding="utf-8") as f: json.dump(out,f,ensure_ascii=False,separators=(",",":"))
@@ -89,5 +90,28 @@ def normalize_percent_fields(value):
             if isinstance(row.get(key),(int,float)) and abs(row[key]) <= 1: row[key]=row[key]*100
         out.append(row)
     return out
+
+def enrich_research_stocks(out):
+    """用本轮新闻中已有的股票关联，补齐板块/行业/主线的可追踪标的。"""
+    try:
+        source = "out/cls-news-latest.json"
+        if not os.path.exists(source): source = "data/news.json"
+        with open(source, encoding="utf-8") as f: payload = json.load(f)
+        news = payload if isinstance(payload, list) else payload.get("rows", payload.get("news", []))
+        def labels(row):
+            return " ".join(str(row.get(k, "")) for k in ("name","plate_name","secu_name","stock_name","title","content","mainLine_desc","chance_desc","style_desc"))
+        for key in ("market_wind", "sector_industry", "mainline"):
+            for item in out.get(key, []):
+                if not isinstance(item, dict): continue
+                label = labels(item).strip()
+                found = {}
+                for row in news:
+                    if not isinstance(row, dict) or not label or label not in labels(row): continue
+                    code = str(row.get("stockCode") or row.get("stock_code") or "").strip()
+                    name = str(row.get("stockName") or row.get("stock_name") or row.get("stock") or "").strip()
+                    if code or name: found[code or name] = {"code": code, "name": name or code}
+                if found: item["related_stocks"] = list(found.values())[:12]
+    except Exception:
+        return
 
 if __name__=="__main__": main()

@@ -26,9 +26,22 @@ def collect_ashare(errors):
         import Ashare
         data = Ashare.get_price(code="sh.000001", frequency="1d", count=30)
         if hasattr(data, "tail"): data = data.tail(10).reset_index().to_dict(orient="records")
-        return norm(data)
+        rows = norm(data)
+        if rows:
+            return rows
+        raise RuntimeError("Ashare 返回空数据")
     except Exception as e:
         errors.append("ashare: "+str(e))
+        # Ashare 历史接口偶尔被上游限流；用本轮已采集的指数快照兜底，避免页面空白。
+        try:
+            with open("data/market.json", encoding="utf-8") as f: market = json.load(f)
+            index = next((x for x in market.get("indexes", []) if x.get("code") == "sh000001"), None)
+            if index and index.get("px") is not None:
+                return [{"date": market.get("updatedAt", "")[:10], "open": None,
+                         "close": index.get("px"), "high": None, "low": None,
+                         "pct": index.get("pct"), "source": "market.json 实时快照兜底"}]
+        except Exception as fallback_error:
+            errors.append("ashare fallback: "+str(fallback_error))
         return []
 
 def collect_hithink(errors):

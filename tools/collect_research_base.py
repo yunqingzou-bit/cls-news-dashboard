@@ -11,7 +11,10 @@ def main():
     try: import levistock as lk
     except Exception as e: errors.append("levistock import: "+str(e)); lk=None
     for key,name in {"market_emotion":"market_emotion_cls","market_wind":"market_wind_cls","mainline":"market_mainline_cls","sector_industry":"sector_industry_cls","limit_up":"stock_zt_pool_cls","telegraph":"news_telegraph_cls"}.items():
-        try: out[key]=norm(getattr(lk,name)()) if lk else []
+        try:
+            out[key]=norm(getattr(lk,name)()) if lk else []
+            if key in ("mainline", "telegraph"): out[key]=flatten_items(out[key])
+            if key in ("market_wind", "sector_industry", "limit_up"): out[key]=normalize_percent_fields(out[key])
         except Exception as e: out[key]=[]; errors.append(key+": "+str(e))
     out["ashare"] = collect_ashare(errors)
     out["hithink"] = collect_hithink(errors)
@@ -43,5 +46,28 @@ def collect_hithink(errors):
     except Exception as e:
         errors.append("hithink: "+str(e))
         return {"configured": True, "message": "API 调用失败", "sample": {}}
+
+def flatten_items(value):
+    if isinstance(value,list):
+        return [x for x in value if (isinstance(x,dict) and any(str(v).strip() for v in x.values() if isinstance(v,(str,int,float)))) or (not isinstance(x,dict) and str(x).strip())]
+    if isinstance(value,dict):
+        out=[]
+        for k,v in value.items():
+            if isinstance(v,list): out.extend(flatten_items(v))
+            elif isinstance(v,dict): out.append(v)
+            elif str(v).strip(): out.append({"title":str(k),"content":str(v)})
+        return out
+    return []
+
+def normalize_percent_fields(value):
+    if not isinstance(value,list): return value
+    out=[]
+    for item in value:
+        if not isinstance(item,dict): out.append(item); continue
+        row=dict(item)
+        for key in ("change_pct","changePercent","pct","change"):
+            if isinstance(row.get(key),(int,float)) and abs(row[key]) <= 1: row[key]=row[key]*100
+        out.append(row)
+    return out
 
 if __name__=="__main__": main()

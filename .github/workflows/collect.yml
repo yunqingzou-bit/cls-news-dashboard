@@ -105,6 +105,13 @@ jobs:
           TZ: Asia/Shanghai
         run: node tools/market-news.js
 
+      - name: 采集 levistock A 股研究底座
+        env:
+          TZ: Asia/Shanghai
+        run: |
+          python -m pip install --disable-pip-version-check --quiet git+https://github.com/fleetinglife/levistock.git
+          python tools/collect_research_base.py
+
       - name: 更新盘前及分时市场复盘
         env:
           TZ: Asia/Shanghai
@@ -144,6 +151,7 @@ jobs:
           cp data/technical.json _site/technical.json
           cp data/market.json _site/market.json
           cp data/stars.json _site/stars.json 2>/dev/null || true
+          cp data/research-base.json _site/research-base.json 2>/dev/null || true
           if [ -f out/outlook/index.html ]; then
             cp out/outlook/index.html _site/outlook/index.html
             cp out/outlook.json       _site/outlook.json

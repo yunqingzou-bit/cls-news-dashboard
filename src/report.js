@@ -742,6 +742,7 @@ const NAV_GROUPS = [
   { label: '其他看板', items: [
     { label: '财联社新闻精选20', href: SITE_BASE + 'cls-news-impact-dashboard/' },
     { label: 'A股脉冲 · 实时行情雷达', href: SITE_BASE + 'cls-news-impact-dashboard/a-share-pulse/' },
+    { label: 'AI 投研助手', href: SITE_BASE + 'cls-news-dashboard/ai-investment/', title: '实时电报、新闻解读与热点报告' },
     { label: '选股策略回测看板', href: SITE_BASE + 'ashare-strategy-dashboard/', title: '回测区间 2026-07-13 ~ 09-11' },
   ] },
 ];

@@ -129,7 +129,8 @@ jobs:
 
       - name: 组装发布目录
         run: |
-          mkdir -p _site/cards _site/stockbee _site/outlook _site/stocks _site/market-review
+          mkdir -p _site/cards _site/stockbee _site/outlook _site/stocks _site/market-review _site/ai-investment
+          cp ai-investment/index.html _site/ai-investment/index.html
           cp out/cls-news-latest.html _site/index.html
           cp out/cls-news-cards.html  _site/cards/index.html
           cp market-review/index.html _site/market-review/index.html

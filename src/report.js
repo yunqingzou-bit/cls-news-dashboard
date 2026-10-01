@@ -749,9 +749,9 @@ const CSS_BASE = "body{font-family:'Microsoft YaHei',system-ui,sans-serif;margin
 const SITE_BASE = 'https://yunqingzou-bit.github.io/';
 const NAV_GROUPS = [
   { label: 'A股研究底座', items: [
-    { label: 'levistock 数据 SDK', href: 'https://github.com/fleetinglife/levistock', title: '财联社、东方财富、同花顺、问财等 A 股数据接口', newTab: true },
-    { label: 'Ashare 行情接口', href: 'https://github.com/mpquant/Ashare', title: 'A 股实时行情、历史 K 线和分时数据', newTab: true },
-    { label: 'HiThink 金融 API', href: 'https://github.com/HiThink-Tech/Financial-API', title: '同花顺官方金融数据 API / MCP / CLI（需自行配置授权）', newTab: true },
+    { label: 'levistock 数据研究', href: SITE_BASE + 'cls-news-dashboard/research-base/#levistock', title: '在看板内使用财联社、板块、情绪和涨停数据' },
+    { label: 'Ashare 行情研究', href: SITE_BASE + 'cls-news-dashboard/research-base/#ashare', title: '在看板内查看 A 股行情与历史表现' },
+    { label: 'HiThink 金融数据', href: SITE_BASE + 'cls-news-dashboard/research-base/#hithink', title: '在看板内查看金融 API 接入状态与配置说明' },
   ] },
   { label: '财联社工具箱', items: [
     { label: '财联社数据 SDK', href: 'https://github.com/fleetinglife/levistock', title: 'levistock：封装财联社、东方财富、同花顺、问财等 A 股数据接口', newTab: true },

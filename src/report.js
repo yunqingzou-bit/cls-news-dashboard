@@ -758,6 +758,7 @@ const NAV_GROUPS = [
     { label: '明日关注个股明细', href: SITE_BASE + 'cls-news-dashboard/outlook/', title: '明日看点关注个股的历史明细表' },
     { label: '新闻看板个股明细', href: SITE_BASE + 'cls-news-dashboard/stocks/', title: '财联社新闻股票看板 · 个股表现的历史明细表' },
     { label: 'Stockbee 动量爆发', href: SITE_BASE + 'cls-news-dashboard/stockbee/', title: 'A股近三个月信号与前瞻收益' },
+    { label: '可交易清单', href: SITE_BASE + 'cls-news-dashboard/trade-list/', title: '按可交易性重排：新闻催化 × 技术可否入场 × 位置风险，自动刷新' },
   ] },
   { label: '其他看板', items: [
     { label: '财联社新闻精选20', href: SITE_BASE + 'cls-news-impact-dashboard/' },

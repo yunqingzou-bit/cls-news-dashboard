@@ -268,20 +268,23 @@ td.nm2{font-weight:600;white-space:nowrap}
       （RSI(14)×30% + KDJ(9,3,3)×30% + MACD(12,26,9)×40%）排序，衡量的是<b>指标强弱</b>；
       本清单按<b>可交易性</b>重排——新闻催化强度 × 技术可否入场 × 位置风险，并给每条落到具体价位与作废条件。</p>
 
-    <p><span class="lead">分桶规则（互斥）</span></p>
+    <p><span class="lead">分桶规则（可执行 / 回避 / 观察 三者互斥；复盘池为独立跟踪池）</span></p>
     <ol>
-      <li><b>可执行</b>：有明确低吸位与止损位 · 非涨停且当日涨幅 &lt; 9.5% · 站上 20 日均线 · 博弈档位为「适合」或「可关注」</li>
-      <li><b>观察</b>：当日涨停（收盘价买不到）／ 尚未站上 20 日线 ／ 关键位缺失</li>
-      <li><b>回避</b>：技术面偏空，或 ≥2 个基本面风险标签，或近半年有减持/监管公告</li>
-      <li><b>复盘池</b>：按看板「三个月潜力模型」分排序的长期跟踪池，非当日买入信号</li>
+      <li><b>可执行</b>：有明确低吸位与止损位 · 非涨停且当日涨幅 &lt; 9.5% · 站上 20 日均线 · 博弈档位「适合/可关注」 · 非下降趋势 · 基本面风险标签 &lt; 2 · 近半年无减持/监管公告 · 盈亏比 ≥ 1.5 · 低吸位不高于现价</li>
+      <li><b>回避</b>：技术面偏空，或 ≥2 个基本面风险标签，或近半年有减持/监管公告，且可执行分 &lt; 20（在未进入「可执行」的标的中归入此桶）</li>
+      <li><b>观察</b>：其余未进入「可执行/回避」的标的——当日涨停（收盘价买不到）／ 尚未站上 20 日线 ／ 关键位缺失 等</li>
+      <li><b>复盘池</b>：按看板「三个月潜力模型」分排序的长期跟踪池，<b>与上面三桶可重叠</b>，非当日买入信号</li>
     </ol>
+    <p>归类优先级为「可执行 &gt; 回避 &gt; 观察」，因此同一只股票只会出现在三个行动分桶中的一个；复盘池是另一条维度，不做互斥。</p>
 
-    <p><span class="lead">可执行分</span> = 新闻催化（0–30：栏目权重×3 + 条数 + 博弈档位）
-      + 技术结构（0–30：均线排列 / 趋势）+ 潜力模型（0–15）− 风险惩罚。
+    <p><span class="lead">可执行分</span> = 新闻催化（0–43：栏目权重×3 最高 30 + 新闻条数最高 5 + 博弈档位最高 8）
+      + 技术结构（−6–20：站上 5/10/20 日 +12，仅站上 20 日 +6；上升趋势 +8、形成中 +5、区间 +3、反弹 +2、下降 −6）
+      + 潜力模型（0–15）− 风险惩罚。理论上限约 78 分，实测通常落在 10–65。
       风险惩罚：涨停 −25、接近涨停 −8、量能暴增 −3、每个风险标签 −3、减持/监管 −5。</p>
 
     <p><span class="lead">盈亏比</span> = (现价×1.08 − 低吸位) ÷ (低吸位 − 止损位)。
-      止损位离低吸位不足 1.5% 时视为不可用——那只是数据噪声，不是风控空间，此类标的会被主动剔除并列出。</p>
+      止损位离低吸位不足 1.5% 时视为不可用——那只是数据噪声，不是风控空间，此类标的会被主动剔除并列出。
+      「可执行」另设门槛：盈亏比 ≥ 1.5，且低吸位不得高于现价（否则等于要求买在高于收盘价的位置）。</p>
   </div>
 
   <div class="note" style="border-color:var(--warn-b);background:var(--warn-l);color:#7a4a10">
@@ -557,7 +560,7 @@ function aggregate(rows) {
 
     var rt = (S.riskTxt || "") + " " + (S.holders || "");
     S.riskTags = BAD_TEXT.filter(function (t) { return rt.indexOf(t) >= 0; });
-    S.badNews = /减持|立案|问询|处罚/.test(S.holders || "");
+    S.badNews = /减持|立案|问询|处罚/.test((S.holders || "").replace(/未检索到[^，。;；]*/g, ""));
     S.chg = num(S.chg);
   });
 
@@ -588,17 +591,18 @@ function isTradable(S) {
 function execScore(S) {
   var sc = 0;
 
-  // ① 新闻催化 0–30
+  // ① 新闻催化 0–43（栏目权重×3 最高 30 + 条数最高 5 + 档位最高 8）
   sc += S.catalogWeight * 3;
   sc += Math.min(S.newsCount, 5) * 1;
   if (S.playTier === "适合") sc += 8;
   else if (S.playTier === "可关注") sc += 4;
 
-  // ② 技术结构 0–30
+  // ② 技术结构 −6–20
   var ab = S.position.above || {};
   if (ab["5"] !== undefined && ab["10"] !== undefined && ab["20"] !== undefined) sc += 12;
   else if (ab["20"] !== undefined) sc += 6;
-  if (S.trend.indexOf("上升") === 0) sc += 8;
+  if (S.trend === "上升趋势") sc += 8;
+  else if (S.trend.indexOf("上升") === 0) sc += 5;
   else if (S.trend.indexOf("区间") >= 0) sc += 3;
   else if (S.trend.indexOf("反弹") >= 0) sc += 2;
   else if (S.trend.indexOf("下降") === 0) sc -= 6;
@@ -631,21 +635,21 @@ function classify(book, topN) {
 
   var pool = book.filter(function (S) { return S.tradable; });
 
+  // 可执行：可交易 + 非涨停/涨幅达标 + 站上20日 + 档位好
+  //        + 不偏空 + 风险标签<2 + 无减持监管 + 盈亏比>=1.5 + 低吸位不高于现价
   var executable = pool.filter(function (S) {
     return !S.limitUp
       && (S.playTier === "适合" || S.playTier === "可关注")
       && above20(S)
-      && S.chg !== null && S.chg < 9.5;
+      && S.chg !== null && S.chg < 9.5
+      && S.trend.indexOf("下降") !== 0
+      && S.riskTags.length < 2
+      && !S.badNews
+      && S.rr !== null && S.rr >= 1.5
+      && S.close !== null && S.entry !== null && S.close >= S.entry;
   });
 
-  var watch = book.filter(function (S) {
-    if (EXCLUDE_RE.test(S.name || "")) return false;
-    if (S.execScore <= 0) return false;
-    return S.limitUp
-      || (S.chg !== null && S.chg >= 9.5)
-      || !above20(S)
-      || !S.tradable;
-  });
+  // 「观察」改为三桶归类后的剩余集合（见下方 used 逻辑），不再单独判定。
 
   var avoid = book.filter(function (S) {
     if (EXCLUDE_RE.test(S.name || "")) return false;
@@ -663,14 +667,24 @@ function classify(book, topN) {
     news: function (a, b) { return b.newsCount - a.newsCount || b.execScore - a.execScore; }
   };
 
-  var exIds = {};
-  executable.forEach(function (S) { exIds[S.code] = 1; });
-  watch = watch.filter(function (S) { return !exIds[S.code]; });
+  // 三个行动分桶互斥：优先级 可执行 > 回避 > 观察（观察为剩余集合）。
+  // 复盘池是另一条维度（按潜力分排序的长期跟踪池），允许与上面三桶重叠。
+  var used = {};
+  function add(list, sorter) {
+    var out = [];
+    list.forEach(function (S) { if (!used[S.code]) { used[S.code] = 1; out.push(S); } });
+    return out.sort(sorter);
+  }
+  var exFinal = add(executable, SORTERS.exec);
+  var avFinal = add(avoid, function (a, b) { return a.execScore - b.execScore; });
+  var waFinal = book.filter(function (S) {
+    return !used[S.code] && !EXCLUDE_RE.test(S.name || "") && S.execScore > 0;
+  }).sort(SORTERS.exec);
 
   return {
-    executable: executable.sort(SORTERS.exec).slice(0, topN),
-    watch: watch.sort(SORTERS.exec).slice(0, topN),
-    avoid: avoid.sort(function (a, b) { return a.execScore - b.execScore; }).slice(0, topN),
+    executable: exFinal.slice(0, topN),
+    watch: waFinal.slice(0, topN),
+    avoid: avFinal.slice(0, topN),
     review: review.sort(SORTERS.potential).slice(0, topN),
     excluded: book.filter(function (S) { return !S.tradable; }).map(function (S) {
       var why;
@@ -688,8 +702,8 @@ function classify(book, topN) {
       return { name: S.name, code: S.code, why: why, tier: S.playTier };
     }).sort(function (a, b) { return a.why.localeCompare(b.why); }),
     counts: {
-      executable: executable.length, watch: watch.length,
-      avoid: avoid.length, review: review.length,
+      executable: exFinal.length, watch: waFinal.length,
+      avoid: avFinal.length, review: review.length,
       total: book.length
     }
   };

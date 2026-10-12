@@ -1,0 +1,919 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>目标篮子 · 上涨概率与期望收益排序</title>
+<style>
+:root{--up:#d93025;--down:#0f9d58;--ink:#16181d;--mut:#8a929e;--line:#e5e8ec;
+--bg:#f6f7f9;--card:#fff;--acc:#1257a8;--acc-l:#eef4fb;--acc-b:#cfe0f2;
+--warn:#b45309;--warn-l:#fff7ed;--warn-b:#fed7aa;--bad:#c62828;--bad-l:#fdecea;--bad-b:#f8d7d3}
+*{box-sizing:border-box} html,body{margin:0;padding:0}
+body{font-family:'Microsoft YaHei',-apple-system,'Segoe UI',system-ui,sans-serif;
+background:var(--bg);color:var(--ink);font-size:14px;line-height:1.6}
+.wrap{max-width:1280px;margin:0 auto;padding:20px 16px 80px}
+h1{font-size:21px;margin:0 0 4px} .sub{color:var(--mut);font-size:12.5px;margin-bottom:16px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:16px}
+.kpi{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:11px 13px}
+.kpi b{display:block;color:var(--mut);font-size:11.5px;font-weight:600;margin-bottom:2px}
+.kpi span{font-size:21px;font-weight:800;font-variant-numeric:tabular-nums}
+.kpi small{display:block;color:var(--mut);font-size:11.5px}
+.mkt{background:var(--card);border:1px solid var(--line);border-radius:11px;padding:12px 14px;margin-bottom:16px;
+display:flex;gap:14px;flex-wrap:wrap;align-items:center;font-size:13px}
+.mkt .i{background:#f8fafc;border:1px solid #eef2f7;border-radius:7px;padding:5px 11px}
+.mkt .i em{font-style:normal;color:#414a56;font-weight:600;margin-right:6px}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:11px;padding:14px 16px;margin-bottom:16px}
+.panel h3{margin:0 0 10px;font-size:14px}
+.brow{display:flex;align-items:center;gap:10px;margin-bottom:5px}
+.bname{width:88px;text-align:right;font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.btrack{flex:1;display:flex;align-items:center;gap:8px}
+.btrack i{display:block;height:14px;border-radius:3px}
+.btrack span{font-size:12px;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
+.tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+.tools input{flex:1 1 220px;font:inherit;font-size:13px;padding:7px 11px;border:1px solid var(--line);border-radius:8px}
+.tab{font:inherit;font-size:13px;padding:6px 13px;border-radius:8px;cursor:pointer;border:1px solid var(--line);background:#fff;color:#5b6472}
+.tab.on{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:600}
+.cnt{color:var(--mut);font-size:12.5px;margin-left:auto}
+.tw{overflow-x:auto;background:var(--card);border:1px solid var(--line);border-radius:11px}
+table{border-collapse:collapse;width:100%;font-size:13px;min-width:1080px}
+th{position:sticky;top:0;background:#f8fafc;color:#5b6472;font-weight:600;padding:9px 10px;text-align:left;
+border-bottom:1px solid var(--line);cursor:pointer;white-space:nowrap;user-select:none}
+th:hover{color:var(--acc)}
+td{padding:8px 10px;border-bottom:1px solid #f0f2f5;font-variant-numeric:tabular-nums;white-space:nowrap}
+tr:hover td{background:#fafbfc}
+.up{color:var(--up);font-weight:700} .down{color:var(--down);font-weight:700}
+.bk{font-size:11px;padding:1.5px 7px;border-radius:999px;border:1px solid}
+.bk.exe{background:var(--acc-l);color:var(--acc);border-color:var(--acc-b)}
+.bk.watch{background:#e7f6ec;color:#1b7f4b;border-color:#cfeada}
+.bk.avoid{background:var(--bad-l);color:var(--bad);border-color:var(--bad-b)}
+.bk.hard{background:var(--bad);color:#fff;border-color:var(--bad)}
+.tag{font-size:11px;padding:1px 7px;border-radius:999px;background:#f2f4f7;color:#5b6472;margin-right:3px;white-space:nowrap}
+.tag.bad{background:var(--warn-l);color:var(--warn)}
+.note{color:var(--mut);font-size:12.5px}
+.meth{font-size:13px;color:#414a56;line-height:1.9}
+.meth li{margin-bottom:4px}
+.disclaimer{margin-top:18px;padding:10px 13px;border-radius:9px;background:var(--warn-l);
+border:1px solid var(--warn-b);color:var(--warn);font-size:12.5px}
+@media print {.tools,.tab{display:none}}
+</style>
+</head>
+<body><div class="wrap">
+<h1>目标篮子 · 上涨概率 × 期望收益排序</h1>
+<div class="sub" id="sub">正在加载最新快照…</div>
+<div class="note" id="status" style="margin-bottom:10px"></div>
+
+<div class="mkt" id="mkt"></div>
+<div class="kpis" id="kpis"></div>
+
+<div class="panel">
+<h3>期望收益 Top 20（E[R] = 概率加权后的净预期涨幅）</h3>
+<div id="bars"></div>
+</div>
+
+<div class="tools" id="tools"></div>
+
+<div class="tw">
+<table id="tbl">
+<thead><tr>
+<th data-k="rank">排名</th><th data-k="name">股票</th><th data-k="bucket">分桶</th>
+<th data-k="ER">期望收益 E[R]</th><th data-k="P">上涨概率 P</th>
+<th data-k="up">上行空间</th><th data-k="dn">下行风险</th><th data-k="odds">赔率</th>
+<th data-k="tier">博弈档位</th><th data-k="trend">趋势</th><th data-k="pot">潜力分</th>
+<th data-k="newsCount">催化</th><th>信号依据 / 风险</th>
+</tr></thead>
+<tbody id="tbody"></tbody>
+</table>
+</div>
+
+<div class="panel" style="margin-top:18px">
+<h3>排序模型说明（v2 · 依据 2026-10-13 严格回测修订）</h3>
+<div class="meth">
+<b>目标</b>：在"上涨概率尽量高"与"上涨幅度尽量大"之间取得平衡，因此不单独按概率排序，而是按
+<b style="color:var(--acc)">期望收益 E[R] = P(上涨) × 上行空间 − (1−P) × 下行风险</b> 降序排列。
+<ul>
+<li><b>P(上涨)</b>：以偏弱市场为基准 47%，叠加信号调整，截断于 [12%, 88%]。</li>
+<li><b style="color:var(--up)">v2 新增 · 收盘封板 +0.06</b>：回测（230 事件）显示 day0 收盘封死涨停的股票 T+1 均值 +2.78%、胜率 70%，显著高于其余事件（−1.34%，t≈3.2）——样本内唯一显著正向信号（连板溢价）。</li>
+<li><b style="color:var(--down)">v2 移除 · 追高惩罚</b>（原涨停 −0.04 / 涨幅≥9.5% −0.03）：回测证明与真实驱动信号方向相反，v1 可回测部分综合分 IC = −0.20（显著为负），属于反向选择。</li>
+<li><b style="color:var(--down)">v2 移除 · 栏目权重加成</b>：回测 IC ≈ −0.02，无预测力；栏目信息仅作展示参考。</li>
+<li><b>保留 · 未验证组件</b>：技术趋势、偏多/偏空倾向、均线结构、博弈档位、潜力模型分、量能——这些因子依赖的技术/研究数据被看板刷新至最新时点，无法严格回测，保留但置信度打折。</li>
+<li><b>上行空间</b>：现价至阻力位（看板关键位），缺失时按潜力分映射，上限 30%；<b>下行风险</b>：现价至止损位，缺失时用支撑位或默认 5%，上限 15%。</li>
+<li><b>硬风险置底</b>：股东动向含立案/处罚/问询的股票强制排到最后，概率压至 ≤30%。</li>
+<li><b>执行纪律（封板股）</b>：封板溢价依赖次日能以合理价格买入——仅当次日集合竞价涨幅 &lt; 5% 时按模型执行；一字板或大幅高开放弃追入。</li>
+</ul>
+<b>v1 → v2 排序变化</b>：30 只封板股平均上移约 60 位（远程股份 +114、果麦文化 +93、欢瑞世纪 +72），Top20 成员保持稳定但内部顺序按回测证据重排。
+</div>
+</div>
+
+<div class="disclaimer">本报告为数据驱动的量化排序演示，模型 v2 的修订依据 2026-10-08~12 单一周、单一行情（题材连板市）的样本内回测，<b>尚未经样本外验证</b>，不构成投资建议。快照为单一时点数据，概率与价位会随行情失效；封板股次日一字板可能无法买入，实际可得收益低于模型名义值。</div>
+
+<div class="note" id="foot" style="margin-top:14px"></div>
+</div>
+
+<script>
+"use strict";
+
+/* ==========================================================================
+ * 配置
+ * ========================================================================== */
+
+var DATA_URLS = [
+  "../news.json",
+  "https://yunqingzou-bit.github.io/cls-news-dashboard/news.json"
+];
+var STAMP_URLS = [
+  "../updated.txt",
+  "https://yunqingzou-bit.github.io/cls-news-dashboard/updated.txt"
+];
+var AUTO_MS = 60000;
+
+
+var CATALOG_WEIGHT = {
+  "盘中宝":10, "盘中宝·记者一线":10, "电报解读":9, "九点特供":9, "VIP日报":9,
+  "明日主题前瞻":8, "金牌纪要库":7, "金牌纪要库·风口会议":7,
+  "风口研报·公司":7, "风口研报·行业":7, "风口研报·洞察":7, "风口研报·业绩":7,
+  "公告全知道":7, "掘金行业龙头":6, "机构调研":6,
+  "研选·研报数据":6, "研选•研报数据":6, "研选":6, "数据看盘":6, "风口专家会议":6,
+  "点金互动易":5, "大佬持仓跟踪":5,
+  "财联社早知道":4,
+  "狙击龙虎榜":3, "狙击龙虎榜午盘":3, "龙虎榜":1, "解读龙虎榜":1, "机构龙虎榜解读":1
+};
+var DEF_W = 3;
+
+var BAD_TEXT = ["盈利为负/PE失真","利润同比下滑","营收承压","负面公告事项","退市风险","估值较高"];
+var EXCLUDE_RE = /\*?ST|退$|退市/;
+
+/* ==========================================================================
+ * 工具
+ * ========================================================================== */
+
+function $(id) { return document.getElementById(id); }
+
+function esc(v) {
+  return String(v === null || v === undefined ? "" : v)
+    .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
+    .replace(/"/g,"&quot;").replace(/'/g,"&#39;");
+}
+
+function num(v) {
+  if (v === null || v === undefined || v === "") return null;
+  var x = Number(v);
+  return isFinite(x) ? x : null;
+}
+
+function f2(v) {
+  var x = num(v);
+  return x === null ? "—" : (Math.round(x * 100) / 100).toFixed(2);
+}
+
+function pct(v) {
+  var x = num(v);
+  if (x === null) return "—";
+  return (x > 0 ? "+" : "") + x.toFixed(2) + "%";
+}
+
+function clsPct(v) {
+  var x = num(v);
+  if (x === null) return "flat";
+  return x > 0 ? "up" : (x < 0 ? "down" : "flat");
+}
+
+function firstMatch(re, s) {
+  var m = re.exec(s || "");
+  return m ? m[1] : null;
+}
+
+/** 解析 'A：x\nB：y' */
+function kvParse(txt) {
+  var out = {};
+  String(txt || "").split("\n").forEach(function (line) {
+    var i = line.indexOf("：");
+    if (i > 0) out[line.slice(0, i).trim()] = line.slice(i + 1).trim();
+  });
+  return out;
+}
+
+/* ==========================================================================
+ * 从 news.json 的扁平行 → 看板内部字段
+ * ========================================================================== */
+
+function inferLimit(code, name, maxAbs) {
+  if (/^(sz30|sh688)/.test(code || "")) return 20;
+  if (/ST/i.test(name || "") && maxAbs !== null && maxAbs <= 5.6) return 5;
+  return 10;
+}
+
+function isLimitUp(r) {
+  var close = num(r.close), chg = num(r.changePct), prev = num(r.prevClose);
+  var maxAbs = num(r.maxAbsChange);
+  if (close === null || chg === null || prev === null || prev === 0) return false;
+  if (/^[NC]/.test(r.stockName || "")) return false;
+  var lim = inferLimit(r.stockCode, r.stockName, maxAbs);
+  if (Math.abs(chg - lim) > 1.2) return false;
+  return close >= Math.round(prev * (1 + lim / 100) * 100) / 100 - 0.005;
+}
+
+/** 把一行 news.json 记录转成统一的内部结构 */
+function toRow(r) {
+  var tec = kvParse(r.technicalConclusion);
+  var res = kvParse(r.researchConclusion);
+
+  var playRaw = res["短线博弈"] || "";
+  var playTier = (playRaw.split("｜")[0] || "").trim();
+  if (playTier.indexOf("上市样本") === 0) playTier = "样本不足";
+
+  var entry = num(firstMatch(/(?:参考|回踩)\s*([\d.]+)/, playRaw));
+  var stop  = num(firstMatch(/跌破\s*([\d.]+)/, playRaw));
+
+  var posRaw = tec["位置"] || "";
+  var position = { above: {}, below: {}, testing: null };
+  var mAbove = /站上\s*([\d/]+)\s*日\s*（([\d./]+)）/.exec(posRaw);
+  if (mAbove) {
+    var ps = mAbove[1].split("/"), vs = mAbove[2].split("/");
+    for (var i = 0; i < ps.length; i++) position.above[ps[i]] = num(vs[i]);
+  }
+  var mBelow = /受压\s*([\d/]+)\s*日\s*（([\d./]+)）/.exec(posRaw);
+  if (mBelow) {
+    var ps2 = mBelow[1].split("/"), vs2 = mBelow[2].split("/");
+    for (var j = 0; j < ps2.length; j++) position.below[ps2[j]] = num(vs2[j]);
+  }
+  position.testing = firstMatch(/正在测试\s*(\d+)\s*日均线/, posRaw);
+
+  var kp = tec["关键位"] || "";
+  var support = num(firstMatch(/支撑\s*([\d.]+)/, kp));
+  var resist  = num(firstMatch(/阻力\s*([\d.]+)/, kp));
+
+  var potTxt = res["未来三个月潜力"] || "";
+  var potential = num(firstMatch(/模型(\d+)\s*\/\s*100/, potTxt));
+  if (potential === null) potential = num(firstMatch(/模型\s*(\d+)/, potTxt));
+
+  var valuation = "";
+  Object.keys(res).forEach(function (k) {
+    if (!valuation && k.indexOf("估值") === 0) valuation = res[k];
+  });
+
+  var close = num(r.close), chg = num(r.changePct);
+
+  return {
+    code: r.stockCode || "",
+    name: r.stockName || r.stock || "",
+    stock: r.stock || "",
+    catalog: r.prefix || "",
+    title: r.title || "",
+    url: r.url || "",
+    time: r.time || "",
+    day: (r.time || "").slice(0, 10),
+    tradeDate: r.tradeDate || "",
+
+    close: close, chg: chg,
+    open: num(r.open), prevClose: num(r.prevClose),
+    turnover: num(r.turnover), volRatio: num(r.volRatioPct),
+    m5: num(r.m5), m30: num(r.m30), m120: num(r.m120),
+    forward: r.forward || null,
+
+    playTier: playTier, playRaw: playRaw,
+    entry: entry, stop: stop,
+    support: support, resist: resist,
+    potential: potential,
+    valuation: valuation,
+    theme: res["题材"] || "",
+    holders: res["股东动向"] || "",
+    event: res["目前大事"] || "",
+    riskTxt: potTxt,
+
+    trend: (tec["趋势"] || "").replace(/\s*（日线）\s*/, "").trim(),
+    lean: tec["倾向"] || "",
+    tecPos: posRaw, tecKp: kp, tecVol: tec["量能"] || "",
+    position: position,
+
+    limitUp: isLimitUp(r),
+    newsCount: 1,
+    catalogs: {}
+  };
+}
+
+/* ==========================================================================
+ * 聚合：一行 = 一条「新闻 × 股票」 → 每只股票一条
+ * ========================================================================== */
+
+var PLAY_ORDER = { "适合":4, "可关注":3, "中性":2, "不适合":1, "样本不足":0 };
+
+function aggregate(rows) {
+  var book = {};
+  var order = [];
+
+  rows.forEach(function (raw) {
+    var row = toRow(raw);
+    if (!row.code) return;
+
+    var S = book[row.code];
+    if (!S) {
+      S = book[row.code] = {
+        code: row.code, name: row.name, catalogs: {}, news: [],
+        playTier: row.playTier, playRaw: row.playRaw,
+        entry: row.entry, stop: row.stop,
+        close: row.close, chg: row.chg, turnover: row.turnover, volRatio: row.volRatio,
+        support: row.support, resist: row.resist, potential: row.potential,
+        valuation: row.valuation, theme: row.theme, holders: row.holders, event: row.event,
+        riskTxt: row.riskTxt, trend: row.trend, lean: row.lean,
+        tecPos: row.tecPos, tecKp: row.tecKp, tecVol: row.tecVol,
+        position: row.position, limitUp: row.limitUp,
+        forward: row.forward, latestDay: row.day, days: {}
+      };
+      order.push(S);
+    }
+
+    S.catalogs[row.catalog] = (S.catalogs[row.catalog] || 0) + 1;
+    S.days[row.day] = 1;
+    S.news.push({
+      time: row.time, catalog: row.catalog, title: row.title,
+      url: row.url, chg: row.chg
+    });
+
+    // 更强的博弈档位优先，并同步其价位
+    if ((PLAY_ORDER[row.playTier] || 0) > (PLAY_ORDER[S.playTier] || 0)) {
+      S.playTier = row.playTier; S.playRaw = row.playRaw;
+      S.entry = row.entry; S.stop = row.stop;
+    }
+    // 补齐任何缺失字段
+    ["close","chg","turnover","volRatio","support","resist","potential","theme",
+     "holders","event","valuation"].forEach(function (k) {
+      if (S[k] === null || S[k] === "" || S[k] === undefined) {
+        if (row[k] !== null && row[k] !== "" && row[k] !== undefined) S[k] = row[k];
+      }
+    });
+    if (!S.trend && row.trend) S.trend = row.trend;
+    if (!S.limitUp && row.limitUp) S.limitUp = true;
+    if (!S.forward && row.forward) S.forward = row.forward;
+  });
+
+  order.forEach(function (S) {
+    S.newsCount = S.news.length;
+    S.news.sort(function (a, b) { return (b.time || "").localeCompare(a.time || ""); });
+    S.catalogNames = Object.keys(S.catalogs).sort(function (a, b) {
+      return S.catalogs[b] - S.catalogs[a];
+    });
+    S.topCatalog = S.catalogNames[0] || "";
+    var w = DEF_W;
+    S.catalogNames.forEach(function (c) {
+      w = Math.max(w, CATALOG_WEIGHT[c] || DEF_W);
+    });
+    S.catalogWeight = w;
+    S.days = Object.keys(S.days).sort();
+    S.latestDay = S.days[S.days.length - 1] || S.latestDay;
+
+    var rt = (S.riskTxt || "") + " " + (S.holders || "");
+    S.riskTags = BAD_TEXT.filter(function (t) { return rt.indexOf(t) >= 0; });
+    S.badNews = /减持|立案|问询|处罚/.test((S.holders || "").replace(/未检索到[^，。;；]*/g, ""));
+    S.chg = num(S.chg);
+  });
+
+  return order;
+}
+
+/* ==========================================================================
+ * 打分与分桶
+ * ========================================================================== */
+
+function riskReward(S) {
+  if (S.entry && S.stop && S.close) {
+    var risk = S.entry - S.stop;
+    if (risk <= 0 || risk / S.entry < 0.015) return null;
+    return Math.round(((S.close * 1.08 - S.entry) / risk) * 100) / 100;
+  }
+  return null;
+}
+
+function isTradable(S) {
+  if (EXCLUDE_RE.test(S.name || "")) return false;
+  if (S.entry === null || S.stop === null) return false;
+  if (S.entry <= 0 || S.stop <= 0 || S.entry <= S.stop) return false;
+  if ((S.entry - S.stop) / S.entry < 0.015) return false;
+  return true;
+}
+
+function execScore(S) {
+  var sc = 0;
+
+  // ① 新闻催化 0–43（栏目权重×3 最高 30 + 条数最高 5 + 档位最高 8）
+  sc += S.catalogWeight * 3;
+  sc += Math.min(S.newsCount, 5) * 1;
+  if (S.playTier === "适合") sc += 8;
+  else if (S.playTier === "可关注") sc += 4;
+
+  // ② 技术结构 −6–20
+  var ab = S.position.above || {};
+  if (ab["5"] !== undefined && ab["10"] !== undefined && ab["20"] !== undefined) sc += 12;
+  else if (ab["20"] !== undefined) sc += 6;
+  if (S.trend === "上升趋势") sc += 8;
+  else if (S.trend.indexOf("上升") === 0) sc += 5;
+  else if (S.trend.indexOf("区间") >= 0) sc += 3;
+  else if (S.trend.indexOf("反弹") >= 0) sc += 2;
+  else if (S.trend.indexOf("下降") === 0) sc -= 6;
+
+  // ③ 潜力模型 0–15
+  if (S.potential !== null) sc += (S.potential - 50) / 50 * 7.5 + 7.5;
+
+  // ④ 风险惩罚
+  sc -= S.riskTags.length * 3;
+  if (S.badNews) sc -= 5;
+  if (S.limitUp) sc -= 25;
+  if (S.chg !== null && S.chg >= 9.5 && !S.limitUp) sc -= 8;
+  if (S.volRatio !== null && S.volRatio >= 100) sc -= 3;
+  if (!S.theme) sc -= 3;
+
+  // ⑤ 数据完整性
+  if (S.entry === null || S.stop === null) sc -= 5;
+
+  return Math.round(sc * 10) / 10;
+}
+
+function classify(book, topN) {
+  book.forEach(function (S) {
+    S.execScore = execScore(S);
+    S.rr = riskReward(S);
+    S.tradable = isTradable(S);
+  });
+
+  function above20(S) { return S.position.above && S.position.above["20"] !== undefined; }
+
+  var pool = book.filter(function (S) { return S.tradable; });
+
+  // 可执行：可交易 + 非涨停/涨幅达标 + 站上20日 + 档位好
+  //        + 不偏空 + 风险标签<2 + 无减持监管 + 盈亏比>=1.5 + 低吸位不高于现价
+  var executable = pool.filter(function (S) {
+    return !S.limitUp
+      && (S.playTier === "适合" || S.playTier === "可关注")
+      && above20(S)
+      && S.chg !== null && S.chg < 9.5
+      && S.trend.indexOf("下降") !== 0
+      && S.riskTags.length < 2
+      && !S.badNews
+      && S.rr !== null && S.rr >= 1.5
+      && S.close !== null && S.entry !== null && S.close >= S.entry;
+  });
+
+  // 「观察」改为三桶归类后的剩余集合（见下方 used 逻辑），不再单独判定。
+
+  var avoid = book.filter(function (S) {
+    if (EXCLUDE_RE.test(S.name || "")) return false;
+    return (S.playTier === "不适合" || S.riskTags.length >= 2 || S.trend.indexOf("下降") === 0)
+      && S.execScore < 20;
+  });
+
+  var review = pool.filter(function (S) { return S.potential !== null; });
+
+  var SORTERS = {
+    exec: function (a, b) { return b.execScore - a.execScore || (b.rr || 0) - (a.rr || 0); },
+    potential: function (a, b) { return (b.potential || 0) - (a.potential || 0) || b.execScore - a.execScore; },
+    rr: function (a, b) { return (b.rr || 0) - (a.rr || 0) || b.execScore - a.execScore; },
+    chg: function (a, b) { return (b.chg || -999) - (a.chg || -999); },
+    news: function (a, b) { return b.newsCount - a.newsCount || b.execScore - a.execScore; }
+  };
+
+  // 三个行动分桶互斥：优先级 可执行 > 回避 > 观察（观察为剩余集合）。
+  // 复盘池是另一条维度（按潜力分排序的长期跟踪池），允许与上面三桶重叠。
+  var used = {};
+  function add(list, sorter) {
+    var out = [];
+    list.forEach(function (S) { if (!used[S.code]) { used[S.code] = 1; out.push(S); } });
+    return out.sort(sorter);
+  }
+  var exFinal = add(executable, SORTERS.exec);
+  var avFinal = add(avoid, function (a, b) { return a.execScore - b.execScore; });
+  var waFinal = book.filter(function (S) {
+    return !used[S.code] && !EXCLUDE_RE.test(S.name || "") && S.execScore > 0;
+  }).sort(SORTERS.exec);
+
+  return {
+    executable: exFinal.slice(0, topN),
+    watch: waFinal.slice(0, topN),
+    avoid: avFinal.slice(0, topN),
+    review: review.sort(SORTERS.potential).slice(0, topN),
+    excluded: book.filter(function (S) { return !S.tradable; }).map(function (S) {
+      var why;
+      if (EXCLUDE_RE.test(S.name)) {
+        why = "ST / 退市整理";
+      } else if (S.playTier === "不适合" || S.playTier === "中性" || S.playTier === "样本不足") {
+        why = "博弈档位「" + S.playTier + "」本身不提供参考价位";
+      } else if (S.entry === null || S.stop === null) {
+        why = "关键位缺失，无法设定止损";
+      } else if (S.entry <= S.stop) {
+        why = "止损位不低于低吸位，价位逻辑异常";
+      } else {
+        why = "止损空间 < 1.5%，风控无效";
+      }
+      return { name: S.name, code: S.code, why: why, tier: S.playTier };
+    }).sort(function (a, b) { return a.why.localeCompare(b.why); }),
+    counts: {
+      executable: exFinal.length, watch: waFinal.length,
+      avoid: avFinal.length, review: review.length,
+      total: book.length
+    }
+  };
+}
+
+/* ===== 模型：rank_model.py 的 JS 版（期望收益排序 v2 · 2026-10-13） ===== */
+var P0 = 0.47;
+function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+function limitPct(code, name) {
+  if (/ST|\*/.test(name || "")) return 5.0;
+  code = code || "";
+  if (code.indexOf("sh688") === 0 || code.indexOf("sz300") === 0 || code.indexOf("sz301") === 0) return 20.0;
+  if (code.indexOf("bj") === 0 || code.indexOf("sh9") === 0) return 30.0;
+  return 10.0;
+}
+function isSealed(chg, code, name) {
+  if (chg === null || chg === undefined) return false;
+  return Math.abs(chg - limitPct(code, name)) <= 0.3;
+}
+function posSet(txt, re) {
+  var m = re.exec(txt || "");
+  if (!m) return null;
+  var s = {};
+  m[1].split("/").forEach(function (x) { s[x] = 1; });
+  return s;
+}
+function hasAll(s, keys) {
+  if (!s) return false;
+  for (var i = 0; i < keys.length; i++) { if (s[keys[i]] === undefined) return false; }
+  return true;
+}
+function probUp(S) {
+  var adj = 0, reasons = [];
+  var t = S.trend || "";
+  if (t === "\u4e0a\u5347\u8d8b\u52bf") { adj += .08; reasons.push("\u4e0a\u5347\u8d8b\u52bf+.08"); }
+  else if (t.indexOf("\u4e0a\u5347") === 0) { adj += .06; reasons.push("\u4e0a\u5347+.06"); }
+  else if (t.indexOf("\u53cd\u5f39") >= 0) { adj += .04; reasons.push("\u53cd\u5f39+.04"); }
+  else if (t.indexOf("\u533a\u95f4") >= 0) { adj += .03; reasons.push("\u9707\u8361+.03"); }
+  else if (t.indexOf("\u4e0b\u964d") === 0) { adj -= .08; reasons.push("\u4e0b\u964d-.08"); }
+
+  var lean = S.lean || "";
+  var dp = /主导情景\s*(\d+)%/.exec(lean);
+  var pct = dp ? (parseInt(dp[1], 10) - 50) / 100 * 0.1 : 0.0;
+  if (lean.indexOf("\u504f\u591a") >= 0) { adj += clamp(.05 + pct, 0, .10); reasons.push("\u6280\u672f\u9762\u504f\u591a"); }
+  else if (lean.indexOf("\u504f\u7a7a") >= 0) { adj -= clamp(.05 - pct, 0, .10); reasons.push("\u6280\u672f\u9762\u504f\u7a7a"); }
+
+  var tecPos = S.tecPos || "";
+  var above = posSet(tecPos, /站上\s*([\d/]+)\s*日/) || {};
+  var below = posSet(tecPos, /受压\s*([\d/]+)\s*日/);
+  if (hasAll(above, ["5", "10", "20"])) { adj += .07; reasons.push("5/10/20\u65e5\u591a\u5934\u6392\u5217"); }
+  else if (above["20"] !== undefined) { adj += .035; reasons.push("\u7ad9\u4e0a20\u65e5\u7ebf"); }
+  if (below && hasAll(below, ["5", "10", "20"])) { adj -= .05; reasons.push("\u53d7\u538b\u4e3b\u8981\u5747\u7ebf"); }
+
+  var TIER = { "\u9002\u5408": .05, "\u53ef\u5173\u6ce8": .025, "\u4e2d\u6027": 0, "\u4e0d\u9002\u5408": -.05, "\u6837\u672c\u4e0d\u8db3": -.02 };
+  var tv = TIER[S.playTier];
+  adj += (tv === undefined ? 0 : tv);
+
+  var pot = S.potential;
+  if (pot !== null && pot !== undefined) {
+    var d = clamp((pot - 55) / 100 * .15, -.07, .07);
+    adj += d;
+    if (d > .02) reasons.push("\u6f5c\u529b\u5206" + pot);
+    else if (d < -.02) reasons.push("\u6f5c\u529b\u504f\u5f31" + pot);
+  }
+  adj += Math.min(S.newsCount || 0, 5) * .004;
+  var vr = S.volRatio;
+  if (vr !== null && vr !== undefined) {
+    if (vr > 0 && vr < 100) adj += .01;
+    else if (vr >= 100) { adj -= .02; reasons.push("\u653e\u91cf\u8fc7\u5ea6"); }
+  }
+  if (isSealed(S.chg, S.code, S.name)) { adj += .06; reasons.push("\u6536\u76d8\u5c01\u677f(\u8fde\u677f\u6ea2\u4ef7)"); }
+  var nRisk = (S.riskTags || []).length;
+  adj -= nRisk * .03;
+  if (S.badNews) { adj -= .08; reasons.push("\u51cf\u6301/\u8d1f\u9762\u516c\u544a"); }
+  if (S._bucket === "executable") adj += .03;
+  else if (S._bucket === "avoid") adj -= .04;
+  return { p: clamp(P0 + adj, .12, .88), adj: adj, nRisk: nRisk, reasons: reasons };
+}
+function hardRiskOf(S) { return /立案|处罚|问询/.test(S.holders || ""); }
+function spacesOf(S) {
+  var close = S.close;
+  if (!close) return { up: null, dn: null, resist: null, stop: null };
+  var resist = S.resist, support = S.support, stop = S.stop;
+  var up = (resist && resist > close) ? (resist - close) / close : null;
+  if (up === null) {
+    var pot = S.potential;
+    up = (pot !== null && pot !== undefined) ? 0.03 + pot / 100 * .09 : 0.05;
+  }
+  var dn = (stop && stop < close) ? (close - stop) / close : null;
+  if (dn === null) dn = (support && support < close) ? (close - support) / close : 0.05;
+  return { up: clamp(up, 0, .30), dn: clamp(dn, .005, .15), resist: resist, stop: stop };
+}
+function copyS(S) {
+  var o = {}, k;
+  for (k in S) { if (Object.prototype.hasOwnProperty.call(S, k)) o[k] = S[k]; }
+  return o;
+}
+function buildRows(buckets) {
+  var PRIO = { executable: 0, watch: 1, avoid: 2, review: 3 };
+  var seen = {}, order = [];
+  ["executable", "watch", "avoid", "review"].forEach(function (bk, prio) {
+    (buckets[bk] || []).forEach(function (S) {
+      var c = S.code;
+      if (!seen[c]) {
+        var o = copyS(S); o._bucket = bk; seen[c] = o; order.push(o);
+      } else if (bk === "review") {
+        seen[c]._in_review = true;
+      } else if (prio < PRIO[seen[c]._bucket]) {
+        var old = seen[c], n = copyS(S);
+        n._bucket = bk; n._in_review = old._in_review || false;
+        seen[c] = n;
+      }
+    });
+  });
+  var rows = order.map(function (S) {
+    var pu = probUp(S), sp = spacesOf(S), hr = hardRiskOf(S);
+    var p = pu.p;
+    if (hr) p = Math.min(p, 0.30);
+    var er = null;
+    if (sp.up !== null) er = (p * sp.up - (1 - p) * sp.dn) * 100;
+    return {
+      code: S.code, name: (S.name || "").trim(), bucket: S._bucket,
+      inReview: !!S._in_review, tier: S.playTier,
+      close: S.close, chg: S.chg,
+      P: Math.round(p * 1000) / 10,
+      up: sp.up !== null ? Math.round(sp.up * 1000) / 10 : null,
+      dn: sp.dn !== null ? Math.round(sp.dn * 1000) / 10 : null,
+      ER: er !== null ? Math.round(er * 100) / 100 : -99,
+      odds: (sp.up && sp.dn) ? Math.round(sp.up / sp.dn * 100) / 100 : null,
+      trend: S.trend, lean: (S.lean || "").split("\uff5c")[0],
+      pot: S.potential, execScore: S.execScore, rr: S.rr,
+      resist: sp.resist, stop: sp.stop, entry: S.entry, support: S.support,
+      newsCount: S.newsCount, catalogs: S.catalogNames || [],
+      theme: (S.theme || "").slice(0, 60), riskTags: S.riskTags,
+      badNews: S.badNews, hardRisk: hr,
+      sealed: isSealed(S.chg, S.code, S.name),
+      reasons: pu.reasons.length ? pu.reasons.join("\uff1b") : "\u4fe1\u53f7\u4e2d\u6027",
+      limitUp: S.limitUp
+    };
+  });
+  rows.sort(function (a, b) {
+    var ha = a.hardRisk ? 1 : 0, hb = b.hardRisk ? 1 : 0;
+    if (ha !== hb) return ha - hb;
+    return b.ER - a.ER;
+  });
+  rows.forEach(function (r, i) { r.rank = i + 1; });
+  return rows;
+}
+
+
+/* ==== RENDER ==== */
+var STATE = { rows: null, meta: null, counts: null, tab: "all", q: "", sortK: "rank", sortAsc: true };
+var BK_LABEL = { executable: "\u53ef\u6267\u884c", watch: "\u89c2\u5bdf", avoid: "\u56de\u907f", review: "\u590d\u76d8\u6c60" };
+function bkLabel(b) { return BK_LABEL[b] || b; }
+
+function fmtV(v, suf, cls) {
+  if (v === null || v === undefined) return '<span class="note">\u2014</span>';
+  var c = cls === undefined ? (v > 0 ? "up" : v < 0 ? "down" : "") : cls;
+  return '<span class="' + c + '">' + v + (suf || "") + "</span>";
+}
+
+function renderHeader() {
+  var card = (STATE.meta && STATE.meta.card) || {};
+  $("sub").innerHTML = '\u6392\u5e8f\u6a21\u578b <b>v2\uff08\u56de\u6d4b\u4fee\u8ba2\u7248 2026-10-13\uff09</b> \u00b7 \u6570\u636e\u6e90\uff1a\u8d22\u8054\u793e\u770b\u677f trade-list \u5feb\u7167\uff08'
+    + esc(card.updatedText || "\u2014") + ' \u66f4\u65b0\uff0c\u533a\u95f4 ' + esc((STATE.meta && STATE.meta.range) || "\u2014")
+    + '\uff09\u00b7 \u6392\u5e8f\u6a21\u578b\uff1aE[R] = P(\u4e0a\u6da8) \u00d7 \u4e0a\u884c\u7a7a\u95f4 \u2212 (1\u2212P) \u00d7 \u4e0b\u884c\u98ce\u9669';
+  var idxs = card.indexes || [], br = card.breadth || {};
+  function box(nm) {
+    var it = null;
+    for (var i = 0; i < idxs.length; i++) { if (idxs[i].name === nm) { it = idxs[i]; break; } }
+    if (!it) return '<span class="i"><em>' + esc(nm) + '</em>\u2014</span>';
+    var c = it.pct > 0 ? "up" : (it.pct < 0 ? "down" : "");
+    return '<span class="i"><em>' + esc(nm) + '</em>' + f2(it.px) + ' <b class="' + c + '">' + pct(it.pct) + '</b></span>';
+  }
+  var tone = (br.up || 0) >= (br.down || 0) ? "\u504f\u5f3a" : "\u504f\u5f31";
+  $("mkt").innerHTML = '<span><b style="font-size:13px">\u5e02\u573a\u73af\u5883\uff1a</b></span>'
+    + box("\u4e0a\u8bc1\u6307\u6570") + box("\u6df1\u8bc1\u6210\u6307") + box("\u521b\u4e1a\u677f\u6307")
+    + '<span class="i"><em>\u6da8\u8dcc\u5bb6\u6570</em>' + (br.up === undefined ? "-" : br.up) + " / "
+    + (br.down === undefined ? "-" : br.down) + '\uff08' + tone + '\uff09</span>';
+}
+
+function statCounts(rows) {
+  var o = { total: rows.length, exe: 0, watch: 0, avoid: 0, pos: 0, hard: 0, seal: 0 };
+  rows.forEach(function (r) {
+    if (r.bucket === "executable") o.exe++;
+    if (r.bucket === "watch") o.watch++;
+    if (r.bucket === "avoid") o.avoid++;
+    if (r.ER > 0 && !r.hardRisk) o.pos++;
+    if (r.hardRisk) o.hard++;
+    if (r.sealed) o.seal++;
+  });
+  return o;
+}
+
+function renderKpis(rows) {
+  var c = statCounts(rows);
+  function kpi(cls, label, val, valCls, small) {
+    return '<div class="kpi ' + (cls || "") + '"><b>' + esc(label) + '</b><span class="' + (valCls || "") + '">'
+      + val + '</span><small>' + esc(small) + '</small></div>';
+  }
+  $("kpis").innerHTML =
+    kpi("", "\u7bee\u5b50\u80a1\u7968\u603b\u6570", c.total, "", "\u53bb\u91cd\u540e\uff08\u770b\u677f\u53e3\u5f84 " + (STATE.counts ? STATE.counts.total : c.total) + "\uff09")
+    + kpi("exe", "\u53ef\u6267\u884c\u6876", c.exe, "", "\u901a\u8fc7\u5168\u90e8\u98ce\u63a7\u4e0e\u7ed3\u6784\u7b5b\u9009")
+    + kpi("", "\u89c2\u5bdf\u6876", c.watch, "", "\u6709\u4f59\u5730\u4f46\u6761\u4ef6\u672a\u5168\u6ee1\u8db3")
+    + kpi("av", "\u56de\u907f\u6876", c.avoid, "", "\u4fe1\u53f7\u5f31 / \u98ce\u9669\u9ad8")
+    + kpi("", "\u6b63\u671f\u671b\u80a1\u7968", c.pos, "up", "E[R] &gt; 0 \u4e14\u65e0\u786c\u98ce\u9669")
+    + kpi("", "\u786c\u98ce\u9669\u7f6e\u5e95", c.hard, "down", "\u7acb\u6848/\u5904\u7f5a/\u95ee\u8be2\u7c7b")
+    + kpi("exe", "\u6536\u76d8\u5c01\u677f", c.seal, "", "\u56de\u6d4b\u663e\u8457\u4fe1\u53f7 \u00b7 \u6b21\u65e5\u7ade\u4ef7&lt;5%\u65b9\u53ef\u6267\u884c");
+}
+
+function renderBars(rows) {
+  var top = rows.slice(0, 20), maxEr = 1;
+  top.forEach(function (r) { maxEr = Math.max(maxEr, Math.abs(r.ER)); });
+  $("bars").innerHTML = top.map(function (r) {
+    var w = Math.max(2, Math.abs(r.ER) / maxEr * 100);
+    var color = r.ER >= 0 ? "#d93025" : "#0f9d58";
+    return '<div class="brow"><div class="bname">' + esc(r.name) + '</div>'
+      + '<div class="btrack"><i style="width:' + w + '%;background:' + color + '"></i>'
+      + '<span style="color:' + color + '">' + (r.ER >= 0 ? "+" : "") + r.ER.toFixed(1) + '%</span></div></div>';
+  }).join("");
+}
+
+function renderTools() {
+  var c = statCounts(STATE.rows);
+  var defs = [["all", "\u5168\u90e8", c.total], ["executable", "\u53ef\u6267\u884c", c.exe], ["watch", "\u89c2\u5bdf", c.watch], ["avoid", "\u56de\u907f", c.avoid]];
+  $("tools").innerHTML = defs.map(function (d) {
+    return '<button class="tab' + (STATE.tab === d[0] ? " on" : "") + '" data-bk="' + d[0] + '">' + d[1] + '\uff08' + d[2] + '\uff09</button>';
+  }).join("")
+    + '<input id="q" type="search" placeholder="\u641c\u7d22\u540d\u79f0 / \u4ee3\u7801 / \u9898\u6750\u2026" value="' + esc(STATE.q) + '">'
+    + '<button class="tab" id="csv">\u5bfc\u51fa CSV</button>'
+    + '<button class="tab" id="reload">\u91cd\u65b0\u8ba1\u7b97</button>'
+    + '<span class="cnt" id="cnt"></span>';
+  Array.prototype.forEach.call(document.querySelectorAll('.tab[data-bk]'), function (b) {
+    b.onclick = function () { STATE.tab = b.getAttribute("data-bk"); renderTools(); };
+  });
+  $("q").oninput = function (e) { STATE.q = e.target.value.trim(); renderTable(); };
+  $("csv").onclick = exportCsv;
+  $("reload").onclick = function () { load(); };
+  renderTable();
+}
+
+function renderTable() {
+  var list = STATE.rows.filter(function (r) { return STATE.tab === "all" || r.bucket === STATE.tab; });
+  if (STATE.q) {
+    var s = STATE.q.toLowerCase();
+    list = list.filter(function (r) { return ((r.name || "") + (r.code || "") + (r.theme || "")).toLowerCase().indexOf(s) >= 0; });
+  }
+  var k = STATE.sortK, asc = STATE.sortAsc;
+  list = list.slice().sort(function (a, b) {
+    var x = a[k], y = b[k];
+    if (x === null || x === undefined) x = -999;
+    if (y === null || y === undefined) y = -999;
+    if (typeof x === "string") return asc ? x.localeCompare(y) : y.localeCompare(x);
+    return asc ? x - y : y - x;
+  });
+  $("cnt").textContent = "\u5171 " + list.length + " \u53ea";
+  $("tbody").innerHTML = list.map(function (r) {
+    var bkCls = r.bucket === "executable" ? "exe" : (r.bucket === "avoid" ? "avoid" : "watch");
+    var cat = (r.catalogs && r.catalogs.length)
+      ? "<br><span class=note>" + esc(r.catalogs.slice(0, 2).join("/")) + "</span>" : "";
+    var tags = (r.riskTags || []).map(function (t) { return '<span class="tag bad">' + esc(t) + '</span>'; }).join("");
+    return "<tr>"
+      + "<td>" + r.rank + "</td>"
+      + "<td><b>" + esc(r.name) + '</b> <span class="note">' + esc(r.code) + "</span>"
+      + (r.sealed ? ' <span class="bk exe" title="\u6536\u76d8\u5c01\u677f\uff0c\u56de\u6d4b\u663e\u793a\u6b21\u65e5\u5b58\u5728\u8fde\u677f\u6ea2\u4ef7">\u5c01\u677f</span>' : "")
+      + (r.hardRisk ? ' <span class="bk hard">\u786c\u98ce\u9669</span>' : "") + "</td>"
+      + '<td><span class="bk ' + bkCls + '">' + esc(bkLabel(r.bucket)) + "</span>"
+      + (r.inReview ? ' <span class="tag">\u590d\u76d8\u6c60</span>' : "") + "</td>"
+      + "<td>" + (r.hardRisk ? '<span class="note">\u7f6e\u5e95</span>' : fmtV(r.ER, "%")) + "</td>"
+      + "<td>" + fmtV(r.P, "%", "") + "</td>"
+      + "<td>" + (r.up === null ? "\u2014" : fmtV(r.up, "%", "note")) + "</td>"
+      + "<td>" + (r.dn === null ? "\u2014" : fmtV(r.dn, "%", "note")) + "</td>"
+      + "<td>" + (r.odds === null ? "\u2014" : (r.odds >= 1.5 ? "<b>" + r.odds + "</b>" : r.odds)) + "</td>"
+      + "<td>" + esc(r.tier || "\u2014") + "</td>"
+      + '<td class="note">' + esc(r.trend || "\u2014") + "</td>"
+      + "<td>" + (r.pot === null || r.pot === undefined ? "\u2014" : r.pot) + "</td>"
+      + "<td>" + r.newsCount + "\u6761" + cat + "</td>"
+      + '<td style="white-space:normal;min-width:200px"><span class="note">'
+      + esc(r.reasons || "") + ((r.riskTags || []).length ? " \u00b7 " : "") + tags + "</span></td>"
+      + "</tr>";
+  }).join("");
+}
+
+function exportCsv() {
+  var cols = ["rank", "name", "code", "bk", "ER", "P", "up", "dn", "odds", "tier", "trend", "pot", "newsCount", "reasons"];
+  var rowsCsv = STATE.rows.map(function (r) {
+    var o = copyS(r); o.bk = bkLabel(r.bucket); return o;
+  });
+  var lines = [cols.join(",")].concat(rowsCsv.map(function (r) {
+    return cols.map(function (c) {
+      var v = r[c];
+      if (v === null || v === undefined) v = "";
+      return '"' + String(v).replace(/"/g, '""') + '"';
+    }).join(",");
+  }));
+  var blob = new Blob(["\ufeff" + lines.join("\n")], { type: "text/csv" });
+  var a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "basket_ranking.csv";
+  document.body.appendChild(a); a.click();
+  setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+}
+
+/* sortable headers */
+Array.prototype.forEach.call(document.querySelectorAll("th[data-k]"), function (th) {
+  th.onclick = function () {
+    var k = th.getAttribute("data-k");
+    if (STATE.sortK === k) STATE.sortAsc = !STATE.sortAsc;
+    else { STATE.sortK = k; STATE.sortAsc = (k === "rank" || k === "name"); }
+    renderTable();
+  };
+});
+
+
+/* ===== 加载与自动刷新 ===== */
+var lastStamp = null, lastCheck = null, autoTimer = null, STATE_loaded = false;
+
+function fetchWithTimeout(url, ms) {
+  return new Promise(function (resolve, reject) {
+    var ctrl = new AbortController();
+    var timer = setTimeout(function () { ctrl.abort(); reject(new Error("timeout")); }, ms);
+    fetch(url, { signal: ctrl.signal, redirect: "follow", cache: "no-store" })
+      .then(function (res) {
+        clearTimeout(timer);
+        if (!res.ok) return reject(new Error("HTTP " + res.status));
+        return res.text().then(resolve);
+      })
+      .catch(function (e) { clearTimeout(timer); reject(e); });
+  });
+}
+function bust(url) { return url + (url.indexOf("?") >= 0 ? "&" : "?") + "t=" + Date.now(); }
+function fetchData(onProgress) {
+  onProgress && onProgress("\u6700\u65b0\u5feb\u7167");
+  var list = DATA_URLS.slice(), i = 0;
+  function step() {
+    if (i >= list.length) return Promise.reject(new Error("\u5168\u90e8\u6570\u636e\u901a\u9053\u4e0d\u53ef\u7528"));
+    return fetchWithTimeout(bust(list[i]), 20000).then(function (text) {
+      var d = JSON.parse(text);
+      if (d && Array.isArray(d.rows)) return d;
+      throw new Error("\u5b57\u6bb5\u4e0d\u7b26");
+    }).catch(function () { i++; return step(); });
+  }
+  return step();
+}
+function fetchText(urls, ms) {
+  var list = urls.slice(), i = 0;
+  function step() {
+    if (i >= list.length) return Promise.reject(new Error("no stamp"));
+    return fetchWithTimeout(bust(list[i]), ms).then(function (t) { return String(t).trim(); })
+      .catch(function () { i++; return step(); });
+  }
+  return step();
+}
+function updateFoot() {
+  var el = $("foot");
+  if (!el) return;
+  var when = lastCheck ? lastCheck.toLocaleTimeString("zh-CN") : "\u2014";
+  el.innerHTML = '\u6570\u636e\u6765\u6e90\uff1a\u8d22\u8054\u793e\u770b\u677f news.json \u00b7 \u81ea\u52a8\u5237\u65b0\uff1a\u6bcf '
+    + Math.round(AUTO_MS / 1000) + ' \u79d2\u68c0\u6d4b\u4e00\u6b21 \u00b7 \u6700\u8fd1\u68c0\u67e5 ' + esc(when)
+    + ' \u00b7 \u672c\u9875\u4ec5\u505a\u6570\u636e\u91cd\u7ec4\u4e0e\u6392\u5e8f\uff0c\u4e0d\u6784\u6210\u6295\u8d44\u5efa\u8bae';
+}
+function isChanged() {
+  return fetchText(STAMP_URLS, 10000).then(function (s) {
+    if (!s) return false;
+    if (lastStamp === null) { lastStamp = s; return false; }
+    if (s !== lastStamp) { lastStamp = s; return true; }
+    return false;
+  }).catch(function () { return false; });
+}
+function boot(data, via) {
+  var book = aggregate(data.rows || []);
+  var buckets = classify(book, 400);
+  STATE.meta = data.meta || {};
+  STATE.counts = buckets.counts;
+  STATE.rows = buildRows(buckets);
+  renderHeader();
+  renderKpis(STATE.rows);
+  renderBars(STATE.rows);
+  renderTools();
+  var g = (STATE.meta && STATE.meta.generatedAt) || "\u2014";
+  $("status").innerHTML = '\u5feb\u7167\u751f\u6210\u4e8e <b>' + esc(g) + '</b> \u00b7 \u7bee\u5b50 ' + STATE.rows.length
+    + ' \u53ea \u00b7 \u901a\u9053 ' + esc(via);
+  lastCheck = new Date(); updateFoot();
+  STATE_loaded = true;
+}
+function load() {
+  $("status").innerHTML = '\u6b63\u5728\u6293\u53d6\u6700\u65b0\u5feb\u7167\u2026';
+  fetchData()
+    .then(function (data) { boot(data, "\u540c\u6e90 news.json"); return fetchText(STAMP_URLS, 10000).then(function (s) { lastStamp = s; }).catch(function () {}); })
+    .catch(function (err) {
+      if (STATE_loaded) { $("status").innerHTML = '\u5237\u65b0\u5931\u8d25\uff08' + esc(err.message) + '\uff09\uff0c\u4ecd\u663e\u793a\u4e0a\u4e00\u6b21\u5feb\u7167\u3002'; }
+      else { $("status").innerHTML = '\u6293\u53d6\u5931\u8d25\uff1a' + esc(err.message) + '\u3002\u8bf7\u70b9\u51fb\u300c\u91cd\u65b0\u8ba1\u7b97\u300d\u91cd\u8bd5\u3002'; }
+    });
+}
+function startAuto() {
+  if (autoTimer) clearInterval(autoTimer);
+  autoTimer = setInterval(function () {
+    if (document.hidden) return;
+    isChanged().then(function (c) { if (c) load(); else { lastCheck = new Date(); updateFoot(); } });
+  }, AUTO_MS);
+  document.addEventListener("visibilitychange", function () { if (!document.hidden) isChanged().then(function (c) { if (c) load(); }); });
+  window.addEventListener("focus", function () { isChanged().then(function (c) { if (c) load(); }); });
+  window.addEventListener("online", function () { load(); });
+}
+load();
+startAuto();
+
+</script>
+</body>
+</html>

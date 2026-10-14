@@ -53,6 +53,9 @@ tr:hover td{background:#fafbfc}
 .bk.watch{background:#e7f6ec;color:#1b7f4b;border-color:#cfeada}
 .bk.avoid{background:var(--bad-l);color:var(--bad);border-color:var(--bad-b)}
 .bk.hard{background:var(--bad);color:#fff;border-color:var(--bad)}
+.tg{font-size:10.5px;padding:1px 5px;border-radius:6px;border:1px dashed var(--line);color:var(--note);margin-left:3px;vertical-align:1px}
+.tg.on{border-style:solid;border-color:var(--acc-b);background:var(--acc-l);color:var(--acc);font-weight:600}
+.tg.mid{border-style:solid;border-color:var(--warn-b,var(--acc-b));background:transparent;color:var(--warn,var(--acc))}
 .bk.pool{background:#f2f4f7;color:#5b6472;border-color:#e5e8ec}
 .tag{font-size:11px;padding:1px 7px;border-radius:999px;background:#f2f4f7;color:#5b6472;margin-right:3px;white-space:nowrap}
 .tag.bad{background:var(--warn-l);color:var(--warn)}
@@ -240,6 +243,24 @@ function tCell(v) {
   return '<span class="' + clsPct(x) + '">' + signPct(x) + "</span>";
 }
 
+/* 表格内短/中/长三档速览小标签（与弹窗六模块同一套 analyze 打分口径） */
+function horizonTags(r) {
+  var A = analyze(r, null);
+  function tg(label, v) {
+    var cls = v === "\u53ef\u64cd\u4f5c" ? "tg on" : (v === "\u8c28\u614e\u53ef\u64cd\u4f5c" ? "tg mid" : "tg");
+    return '<span class="' + cls + '" title="' + label + "期：" + v + '">' + label + "</span>";
+  }
+  return tg("\u77ed", A.short.verdict) + tg("\u4e2d", A.mid.verdict) + tg("\u957f", A.long.verdict);
+}
+
+function findRow(day, code) {
+  for (var i = 0; i < STATE.rows.length; i++) {
+    var r = STATE.rows[i];
+    if (r.day === day && r.code === code) return r;
+  }
+  return null;
+}
+
 function renderTable() {
   var list = STATE.rows.filter(function (r) {
     if (STATE.day && r.day !== STATE.day) return false;
@@ -267,7 +288,7 @@ function renderTable() {
     return "<tr>"
       + '<td class="note">' + esc(pub) + "</td>"
       + "<td><b><a class=\"stk\" target=\"_blank\" rel=\"noopener\" title=\"\u5728\u817e\u8baf\u81ea\u9009\u80a1\u6253\u5f00\" href=\"https://gu.qq.com/" + esc(r.code) + "\">" + esc(r.name) + "</a></b> <span class=\"note\">" + esc(r.code) + "</span>"
-      + (num(r.sealed) ? ' <span class="bk exe">\u5c01\u677f</span>' : "") + ' <button class="mini" data-act="an" data-day="' + esc(r.day) + '" data-code="' + esc(r.code) + '">\u5206\u6790</button>' + horizonTags(r, NEWS_IDX ? NEWS_IDX[r.code] || null : null) + "</td>"
+      + (num(r.sealed) ? ' <span class="bk exe">\u5c01\u677f</span>' : "") + ' <button class="mini" data-act="an" data-day="' + esc(r.day) + '" data-code="' + esc(r.code) + '">\u5206\u6790</button>' + horizonTags(r) + "</td>"
       + '<td><span class="bk ' + bk + '">' + esc(BK_LABEL[r.bucket] || r.bucket) + "</span></td>"
       + "<td>" + esc(r.tier || "\u2014") + "</td>"
       + '<td class="note">' + esc(r.trend || "\u2014") + "</td>"

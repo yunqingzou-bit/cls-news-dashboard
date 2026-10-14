@@ -404,7 +404,7 @@ function classify(book, topN) {
  * 财联社新闻筛选个股 · 每日存档
  *   输入：out/cls-news-latest.json（本轮快照，= 站点 news.json）
  *   输出：out/news-archive.json（按快照交易日留档，最多保留 MAX_DATES 天）
- * 云端由 .github/workflows/collect.yml 调用；先 curl 线上 news-archive.json 续接历史。
+ * 每行除筛选结果外，另存「分析页」所需的紧凑因子（趋势/均线站位/支撑阻力/量能/题材/风险/催化）
  * ========================================================================== */
 var fs = require('node:fs');
 var path = require('node:path');
@@ -414,10 +414,11 @@ var SNAP = path.join(ROOT, 'out', 'cls-news-latest.json');
 var ARCH = path.join(ROOT, 'out', 'news-archive.json');
 var MAX_DATES = 45;
 var COLS = ['code', 'name', 'bucket', 'tier', 'close', 'chg', 'score', 'rr', 'entry', 'stop',
-            'pot', 'sealed', 't1', 't2', 't3', 't4', 't5'];
+            'pot', 'sealed', 't1', 't2', 't3', 't4', 't5',
+            'trend', 'above', 'below', 'support', 'resist', 'vol', 'turn', 'theme', 'risk', 'bad', 'news'];
+var N_FIXED = 17;   // t1..t5 结束位置（分析因子从第 17 个下标起）
 
 function readJsonFile(f) { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch (e) { return null; } }
-
 function deriveDay(snap) {
   var best = '';
   (snap.rows || []).forEach(function (r) { var d = String(r.tradeDate || ''); if (d > best) best = d; });
@@ -425,6 +426,11 @@ function deriveDay(snap) {
   var m = /^(\d{4})\/(\d{2})\/(\d{2})/.exec((snap.meta && snap.meta.generatedAt) || '');
   if (m) return m[1] + '-' + m[2] + '-' + m[3];
   return new Date().toISOString().slice(0, 10);
+}
+function maKeys(obj) {
+  if (!obj) return '';
+  return Object.keys(obj).map(function (k) { return parseInt(k, 10); })
+    .filter(function (n) { return isFinite(n); }).sort(function (a, b) { return a - b; }).join('/');
 }
 function fwdT(S) {
   var f = S.forward;
@@ -435,6 +441,7 @@ function fwdT(S) {
 }
 function bkIdx(b) { return b === 'executable' ? 0 : (b === 'watch' ? 1 : (b === 'avoid' ? 2 : 3)); }
 function nz(v) { return (v === null || v === undefined) ? -1e9 : v; }
+function rnd(v, d) { return (v === null || v === undefined) ? null : Math.round(v * d) / d; }
 
 function main() {
   var snap = readJsonFile(SNAP);
@@ -449,17 +456,18 @@ function main() {
   });
 
   var rowsMap = {};
-  var nRow = 0;
   book.forEach(function (S) {
     if (!bMap[S.code]) return;
     var t = fwdT(S);
     rowsMap[S.code] = [S.code, S.name, bMap[S.code], S.playTier || '', S.close, S.chg,
-      S.execScore, S.rr, S.entry, S.stop, S.potential, (S.limitUp ? 1 : 0),
-      t[0], t[1], t[2], t[3], t[4]];
-    nRow++;
+      rnd(S.execScore, 10), rnd(S.rr, 100), S.entry, S.stop, S.potential, (S.limitUp ? 1 : 0),
+      t[0], t[1], t[2], t[3], t[4],
+      S.trend || '', maKeys(S.position && S.position.above), maKeys(S.position && S.position.below),
+      S.support, S.resist, rnd(S.volRatio, 10), rnd(S.turnover, 100),
+      (S.theme || '').slice(0, 28), (S.riskTags || []).join('|'), (S.badNews ? 1 : 0), S.newsCount];
   });
 
-  var arch = readJsonFile(ARCH) || { version: 1 };
+  var arch = readJsonFile(ARCH) || { version: 2 };
   if (!Array.isArray(arch.dates)) arch.dates = [];
   var cur = null;
   arch.dates.forEach(function (d) { if (d && d.day === day) cur = d; });
@@ -474,7 +482,7 @@ function main() {
   (cur.rows || []).forEach(function (r) { if (Array.isArray(r) && r.length) prev[r[0]] = r; });
   var merged = [];
   Object.keys(rowsMap).forEach(function (c) {
-    var n = rowsMap[c], p = prev[c];
+    var n = rowsMap[c].slice(), p = prev[c];
     if (p) { for (var i = 12; i <= 16; i++) { if ((n[i] === null || n[i] === undefined) && p[i] !== null && p[i] !== undefined) n[i] = p[i]; } }
     merged.push(n);
   });
@@ -482,7 +490,7 @@ function main() {
   merged.sort(function (a, b) { return bkIdx(a[2]) - bkIdx(b[2]) || nz(b[6]) - nz(a[6]) || String(a[0]).localeCompare(String(b[0])); });
   cur.rows = merged;
 
-  arch.version = 1; arch.columns = COLS; arch.updatedAt = new Date().toISOString();
+  arch.version = 2; arch.columns = COLS; arch.updatedAt = new Date().toISOString();
   arch.dates.sort(function (a, b) { return a.day < b.day ? 1 : (a.day > b.day ? -1 : 0); });
   if (arch.dates.length > MAX_DATES) arch.dates = arch.dates.slice(0, MAX_DATES);
 

@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>财联社新闻筛选个股 · 存档案</title>
+<style>
+:root{--up:#d93025;--down:#0f9d58;--ink:#16181d;--mut:#8a929e;--line:#e5e8ec;
+--bg:#f6f7f9;--card:#fff;--acc:#1257a8;--acc-l:#eef4fb;--acc-b:#cfe0f2;
+--warn:#b45309;--warn-l:#fff7ed;--warn-b:#fed7aa;--bad:#c62828;--bad-l:#fdecea;--bad-b:#f8d7d3}
+*{box-sizing:border-box} html,body{margin:0;padding:0}
+body{font-family:'Microsoft YaHei',-apple-system,'Segoe UI',system-ui,sans-serif;
+background:var(--bg);color:var(--ink);font-size:14px;line-height:1.6}
+.wrap{max-width:1280px;margin:0 auto;padding:20px 16px 80px}
+h1{font-size:21px;margin:0 0 4px} .sub{color:var(--mut);font-size:12.5px;margin-bottom:16px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:16px}
+.kpi{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:11px 13px}
+.kpi b{display:block;color:var(--mut);font-size:11.5px;font-weight:600;margin-bottom:2px}
+.kpi span{font-size:21px;font-weight:800;font-variant-numeric:tabular-nums}
+.kpi small{display:block;color:var(--mut);font-size:11.5px}
+.mkt{background:var(--card);border:1px solid var(--line);border-radius:11px;padding:12px 14px;margin-bottom:16px;
+display:flex;gap:14px;flex-wrap:wrap;align-items:center;font-size:13px}
+.mkt .i{background:#f8fafc;border:1px solid #eef2f7;border-radius:7px;padding:5px 11px}
+.mkt .i em{font-style:normal;color:#414a56;font-weight:600;margin-right:6px}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:11px;padding:14px 16px;margin-bottom:16px}
+.panel h3{margin:0 0 10px;font-size:14px}
+.brow{display:flex;align-items:center;gap:10px;margin-bottom:5px}
+.bname{width:88px;text-align:right;font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.btrack{flex:1;display:flex;align-items:center;gap:8px}
+.btrack i{display:block;height:14px;border-radius:3px}
+.btrack span{font-size:12px;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
+.tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+.tools input{flex:1 1 220px;font:inherit;font-size:13px;padding:7px 11px;border:1px solid var(--line);border-radius:8px}
+.tab{font:inherit;font-size:13px;padding:6px 13px;border-radius:8px;cursor:pointer;border:1px solid var(--line);background:#fff;color:#5b6472}
+.tab.on{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:600}
+.cnt{color:var(--mut);font-size:12.5px;margin-left:auto}
+.tw{overflow-x:auto;background:var(--card);border:1px solid var(--line);border-radius:11px}
+table{border-collapse:collapse;width:100%;font-size:13px;min-width:1080px}
+th{position:sticky;top:0;background:#f8fafc;color:#5b6472;font-weight:600;padding:9px 10px;text-align:left;
+border-bottom:1px solid var(--line);cursor:pointer;white-space:nowrap;user-select:none}
+th:hover{color:var(--acc)}
+td{padding:8px 10px;border-bottom:1px solid #f0f2f5;font-variant-numeric:tabular-nums;white-space:nowrap}
+tr:hover td{background:#fafbfc}
+.up{color:var(--up);font-weight:700} .down{color:var(--down);font-weight:700}
+.bk{font-size:11px;padding:1.5px 7px;border-radius:999px;border:1px solid}
+.bk.exe{background:var(--acc-l);color:var(--acc);border-color:var(--acc-b)}
+.bk.watch{background:#e7f6ec;color:#1b7f4b;border-color:#cfeada}
+.bk.avoid{background:var(--bad-l);color:var(--bad);border-color:var(--bad-b)}
+.bk.hard{background:var(--bad);color:#fff;border-color:var(--bad)}
+.tag{font-size:11px;padding:1px 7px;border-radius:999px;background:#f2f4f7;color:#5b6472;margin-right:3px;white-space:nowrap}
+.tag.bad{background:var(--warn-l);color:var(--warn)}
+.note{color:var(--mut);font-size:12.5px}
+.meth{font-size:13px;color:#414a56;line-height:1.9}
+.meth li{margin-bottom:4px}
+.disclaimer{margin-top:18px;padding:10px 13px;border-radius:9px;background:var(--warn-l);
+border:1px solid var(--warn-b);color:var(--warn);font-size:12.5px}
+@media print {.tools,.tab{display:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>财联社新闻筛选个股 · 存档案</h1>
+<div class="sub" id="sub">正在加载存档…</div>
+<div class="note" id="status" style="margin-bottom:10px"></div>
+
+<div class="tools" id="tools"></div>
+
+<div class="tw">
+<table id="tbl">
+<thead><tr>
+<th data-k="day">日期</th><th data-k="name">股票</th><th data-k="bucket">分桶</th><th data-k="tier">档位</th>
+<th data-k="close">现价</th><th data-k="chg">当日</th><th data-k="score">可执行分</th><th data-k="rr">盈亏比</th>
+<th data-k="entry">低吸位</th><th data-k="stop">止损位</th><th data-k="pot">潜力分</th><th data-k="sealed">封板</th>
+<th data-k="t1">T+1</th><th data-k="t2">T+2</th><th data-k="t3">T+3</th><th data-k="t4">T+4</th><th data-k="t5">T+5</th>
+</tr></thead>
+<tbody id="tbody"></tbody>
+</table>
+</div>
+
+<div class="panel" style="margin-top:18px">
+<h3>口径说明</h3>
+<div class="meth">
+本页把<b>每个快照交易日</b>的「财联社新闻筛选篮子」留档成一张表：
+篮子内每一只股票都保留当日的<b>分桶（可执行 / 观察 / 回避）、博弈档位、可执行分、盈亏比、低吸位、止损位、潜力分、是否收盘封板</b>，
+以及看板快照自带的 <b>T+1 ~ T+5</b> 后续涨跌。
+<ul>
+<li><b>数据来源</b>：看板 <code>news.json</code> 快照（财联社目标栏目新闻 × 个股）经同一套 aggregate / classify 口径重算，与「可交易清单」页面一致。</li>
+<li><b>归档节奏</b>：每轮快照（盘中约 10 分钟）追加到当日，按日去重，最多保留最近 45 个快照日。</li>
+<li><b>T+n 口径</b>：取自快照自带的 forward 字段，随快照滚动补齐；超出保留窗口的旧记录停在最后一次见到的值。</li>
+<li><b>不构成投资建议</b>：价位为位置参考，不含滑点与流动性。</li>
+</ul>
+</div>
+</div>
+
+<div class="note" id="foot" style="margin-top:14px"></div>
+</div>
+
+<script>
+var DATA_URLS = ["../news-archive.json", "https://yunqingzou-bit.github.io/cls-news-dashboard/news-archive.json"];
+var STAMP_URLS = ["../updated.txt", "https://yunqingzou-bit.github.io/cls-news-dashboard/updated.txt"];
+var AUTO_MS = 60000;
+var BK_LABEL = { executable: "\u53ef\u6267\u884c", watch: "\u89c2\u5bdf", avoid: "\u56de\u907f", review: "\u590d\u76d8\u6c60" };
+var BK_CLS = { executable: "exe", watch: "watch", avoid: "avoid", review: "watch" };
+var BK_PRIO = { executable: 0, watch: 1, avoid: 2, review: 3 };
+
+var STATE = { rows: [], dates: [], day: "", bucket: "all", q: "", sortK: "", sortAsc: false };
+
+function $(id) { return document.getElementById(id); }
+function esc(v) { return String(v === null || v === undefined ? "" : v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;"); }
+function num(v) { if (v === null || v === undefined || v === "") return null; var x = Number(v); return isFinite(x) ? x : null; }
+function f2(v) { var x = num(v); return x === null ? "\u2014" : (Math.round(x * 100) / 100).toFixed(2); }
+function signPct(v) { var x = num(v); if (x === null) return "\u2014"; return (x > 0 ? "+" : "") + x.toFixed(2) + "%"; }
+function clsPct(v) { var x = num(v); if (x === null) return ""; return x > 0 ? "up" : (x < 0 ? "down" : ""); }
+
+function fetchWithTimeout(url, ms) {
+  return new Promise(function (resolve, reject) {
+    var ctrl = new AbortController();
+    var timer = setTimeout(function () { ctrl.abort(); reject(new Error("timeout")); }, ms);
+    fetch(url, { signal: ctrl.signal, redirect: "follow", cache: "no-store" })
+      .then(function (res) { clearTimeout(timer); if (!res.ok) return reject(new Error("HTTP " + res.status)); return res.text().then(resolve); })
+      .catch(function (e) { clearTimeout(timer); reject(e); });
+  });
+}
+function bust(u) { return u + (u.indexOf("?") >= 0 ? "&" : "?") + "t=" + Date.now(); }
+function fetchJson(urls, ms) {
+  var list = urls.slice(), i = 0;
+  function step() {
+    if (i >= list.length) return Promise.reject(new Error("\u5168\u90e8\u901a\u9053\u4e0d\u53ef\u7528"));
+    return fetchWithTimeout(bust(list[i]), ms).then(function (t) { var d = JSON.parse(t); if (d && Array.isArray(d.dates)) return d; throw new Error("\u5b57\u6bb5\u4e0d\u7b26"); })
+      .catch(function () { i++; return step(); });
+  }
+  return step();
+}
+function fetchText(urls, ms) {
+  var list = urls.slice(), i = 0;
+  function step() {
+    if (i >= list.length) return Promise.reject(new Error("no stamp"));
+    return fetchWithTimeout(bust(list[i]), ms).then(function (t) { return String(t).trim(); }).catch(function () { i++; return step(); });
+  }
+  return step();
+}
+
+function statCounts(rows) {
+  var o = { total: rows.length, executable: 0, watch: 0, avoid: 0, review: 0 };
+  rows.forEach(function (r) { if (o[r.bucket] !== undefined) o[r.bucket]++; });
+  return o;
+}
+
+function renderSub(data) {
+  var latest = data.dates && data.dates[0] ? data.dates[0] : null;
+  var c = (latest && latest.counts) || {};
+  $("sub").innerHTML = '\u5b58\u6863 <b>' + (data.dates ? data.dates.length : 0) + '</b> \u4e2a\u5feb\u7167\u65e5 \u00b7 \u6700\u65b0 <b>'
+    + esc(latest ? latest.day : "\u2014") + '</b>\uff08\u7bee\u5b50 ' + (c.total === undefined ? "-" : c.total)
+    + ' \u00b7 \u53ef\u6267\u884c <b class="up">' + (c.executable === undefined ? "-" : c.executable) + '</b>\uff09\u00b7 \u6765\u6e90\uff1a\u8d22\u8054\u793e\u770b\u677f news.json';
+}
+
+function renderTools() {
+  var opts = ['<option value="">\u5168\u90e8\u65e5\u671f</option>']
+    .concat(STATE.dates.map(function (d) { return '<option value="' + esc(d) + '"' + (STATE.day === d ? " selected" : "") + '>' + esc(d) + "</option>"; }));
+  var c = statCounts(STATE.rows);
+  var bks = [["all", "\u5168\u90e8", STATE.rows.length], ["executable", "\u53ef\u6267\u884c", c.executable], ["watch", "\u89c2\u5bdf", c.watch], ["avoid", "\u56de\u907f", c.avoid]];
+  $("tools").innerHTML =
+    '<select id="fday" style="font:inherit;font-size:13px;padding:7px 10px;border:1px solid var(--line);border-radius:8px">' + opts.join("") + "</select>"
+    + bks.map(function (b) {
+      return '<button class="tab' + (STATE.bucket === b[0] ? " on" : "") + '" data-bk="' + b[0] + '">' + b[1] + "\uff08" + b[2] + "\uff09</button>";
+    }).join("")
+    + '<input id="q" type="search" placeholder="\u641c\u7d22\u540d\u79f0 / \u4ee3\u7801 / \u6863\u4f4d\u2026" value="' + esc(STATE.q) + '">'
+    + '<button class="tab" id="csv">\u5bfc\u51fa CSV</button>'
+    + '<span class="cnt" id="cnt"></span>';
+  $("fday").onchange = function (e) { STATE.day = e.target.value; renderTools(); };
+  Array.prototype.forEach.call(document.querySelectorAll(".tab[data-bk]"), function (b) {
+    b.onclick = function () { STATE.bucket = b.getAttribute("data-bk"); renderTools(); };
+  });
+  $("q").oninput = function (e) { STATE.q = e.target.value.trim(); renderTable(); };
+  $("csv").onclick = exportCsv;
+  renderTable();
+}
+
+function tCell(v) {
+  var x = num(v);
+  if (x === null) return '<span class="note">\u2014</span>';
+  return '<span class="' + clsPct(x) + '">' + signPct(x) + "</span>";
+}
+
+function renderTable() {
+  var list = STATE.rows.filter(function (r) {
+    if (STATE.day && r.day !== STATE.day) return false;
+    if (STATE.bucket !== "all" && r.bucket !== STATE.bucket) return false;
+    if (STATE.q) {
+      var s = STATE.q.toLowerCase();
+      if (((r.name || "") + (r.code || "") + (r.tier || "")).toLowerCase().indexOf(s) < 0) return false;
+    }
+    return true;
+  });
+  if (STATE.sortK) {
+    var k = STATE.sortK, asc = STATE.sortAsc;
+    list = list.slice().sort(function (a, b) {
+      var x = a[k], y = b[k];
+      if (x === null || x === undefined) x = -1e9;
+      if (y === null || y === undefined) y = -1e9;
+      if (typeof x === "string") return asc ? x.localeCompare(y) : y.localeCompare(x);
+      return asc ? x - y : y - x;
+    });
+  }
+  $("cnt").textContent = "\u5171 " + list.length + " \u6761";
+  $("tbody").innerHTML = list.map(function (r) {
+    var bk = BK_CLS[r.bucket] || "watch";
+    return "<tr>"
+      + '<td class="note">' + esc(r.day) + "</td>"
+      + "<td><b>" + esc(r.name) + '</b> <span class="note">' + esc(r.code) + "</span>"
+      + (num(r.sealed) ? ' <span class="bk exe">\u5c01\u677f</span>' : "") + "</td>"
+      + '<td><span class="bk ' + bk + '">' + esc(BK_LABEL[r.bucket] || r.bucket) + "</span></td>"
+      + "<td>" + esc(r.tier || "\u2014") + "</td>"
+      + "<td>" + f2(r.close) + "</td>"
+      + '<td class="' + clsPct(r.chg) + '">' + signPct(r.chg) + "</td>"
+      + "<td>" + (num(r.score) === null ? "\u2014" : r.score) + "</td>"
+      + "<td>" + (num(r.rr) === null ? "\u2014" : r.rr) + "</td>"
+      + "<td>" + f2(r.entry) + "</td>"
+      + "<td>" + f2(r.stop) + "</td>"
+      + "<td>" + (num(r.pot) === null ? "\u2014" : r.pot) + "</td>"
+      + "<td>" + (num(r.sealed) ? '<span class="up">\u662f</span>' : "\u2014") + "</td>"
+      + "<td>" + tCell(r.t1) + "</td><td>" + tCell(r.t2) + "</td><td>" + tCell(r.t3) + "</td><td>" + tCell(r.t4) + "</td><td>" + tCell(r.t5) + "</td>"
+      + "</tr>";
+  }).join("");
+}
+
+function currentList() {
+  return STATE.rows.filter(function (r) {
+    if (STATE.day && r.day !== STATE.day) return false;
+    if (STATE.bucket !== "all" && r.bucket !== STATE.bucket) return false;
+    if (STATE.q) { var s = STATE.q.toLowerCase(); if (((r.name || "") + (r.code || "") + (r.tier || "")).toLowerCase().indexOf(s) < 0) return false; }
+    return true;
+  });
+}
+
+function exportCsv() {
+  var cols = [["day", "\u65e5\u671f"], ["name", "\u80a1\u7968"], ["code", "\u4ee3\u7801"], ["bucket", "\u5206\u6876"], ["tier", "\u6863\u4f4d"],
+    ["close", "\u73b0\u4ef7"], ["chg", "\u5f53\u65e5%"], ["score", "\u53ef\u6267\u884c\u5206"], ["rr", "\u76c8\u4e8f\u6bd4"],
+    ["entry", "\u4f4e\u5438\u4f4d"], ["stop", "\u6b62\u635f\u4f4d"], ["pot", "\u6f5c\u529b\u5206"], ["sealed", "\u5c01\u677f"],
+    ["t1", "T+1"], ["t2", "T+2"], ["t3", "T+3"], ["t4", "T+4"], ["t5", "T+5"]];
+  var list = currentList();
+  var lines = [cols.map(function (c) { return c[1]; }).join(",")];
+  list.forEach(function (r) {
+    lines.push(cols.map(function (c) {
+      var v = r[c[0]];
+      if (c[0] === "bucket") v = BK_LABEL[v] || v;
+      if (c[0] === "sealed") v = num(v) ? "\u662f" : "";
+      if (v === null || v === undefined) v = "";
+      v = String(v).replace(/"/g, '""');
+      return /[",\n]/.test(v) ? '"' + v + '"' : v;
+    }).join(","));
+  });
+  var blob = new Blob(["\ufeff" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" });
+  var a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "news-archive-" + (STATE.day || "all") + "-" + (STATE.bucket) + ".csv";
+  document.body.appendChild(a); a.click();
+  setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+}
+
+Array.prototype.forEach.call(document.querySelectorAll("th[data-k]"), function (th) {
+  th.onclick = function () {
+    var k = th.getAttribute("data-k");
+    if (STATE.sortK === k) STATE.sortAsc = !STATE.sortAsc;
+    else { STATE.sortK = k; STATE.sortAsc = !(k === "close" || k === "score" || k === "rr" || k === "pot" || k === "chg"); }
+    renderTable();
+  };
+});
+
+var lastStamp = null, lastCheck = null, autoTimer = null, loaded = false;
+function updateFoot() {
+  $("foot").innerHTML = '\u81ea\u52a8\u5237\u65b0\uff1a\u6bcf ' + Math.round(AUTO_MS / 1000) + ' \u79d2\u68c0\u6d4b\u4e00\u6b21 \u00b7 \u6700\u8fd1\u68c0\u67e5 '
+    + esc(lastCheck ? lastCheck.toLocaleTimeString("zh-CN") : "\u2014") + ' \u00b7 \u672c\u9875\u4ec5\u505a\u6570\u636e\u5f52\u6863\u4e0e\u91cd\u7ec4\uff0c\u4e0d\u6784\u6210\u6295\u8d44\u5efa\u8bae';
+}
+function boot(data, via) {
+  var cols = data.columns || ["code", "name", "bucket", "tier", "close", "chg", "score", "rr", "entry", "stop", "pot", "sealed", "t1", "t2", "t3", "t4", "t5"];
+  var rows = [];
+  (data.dates || []).forEach(function (d) {
+    (d.rows || []).forEach(function (arr) {
+      var o = { day: d.day };
+      cols.forEach(function (c, i) { o[c] = arr[i]; });
+      rows.push(o);
+    });
+  });
+  rows.sort(function (a, b) {
+    if (a.day !== b.day) return a.day < b.day ? 1 : -1;
+    var pa = BK_PRIO[a.bucket] === undefined ? 9 : BK_PRIO[a.bucket], pb = BK_PRIO[b.bucket] === undefined ? 9 : BK_PRIO[b.bucket];
+    if (pa !== pb) return pa - pb;
+    return (num(b.score) === null ? -1e9 : num(b.score)) - (num(a.score) === null ? -1e9 : num(a.score));
+  });
+  STATE.rows = rows;
+  STATE.dates = (data.dates || []).map(function (d) { return d.day; });
+  STATE.day = STATE.dates.length ? STATE.dates[0] : "";
+  renderSub(data);
+  renderTools();
+  var when = data.updatedAt ? new Date(data.updatedAt).toLocaleString("zh-CN") : "\u2014";
+  $("status").innerHTML = '\u5b58\u6863\u6587\u4ef6\u751f\u6210\u4e8e <b>' + esc(when) + '</b> \u00b7 \u53df\u5171 ' + rows.length + ' \u6761\u8bb0\u5f55 \u00b7 \u901a\u9053 ' + esc(via);
+  lastCheck = new Date(); updateFoot(); loaded = true;
+}
+function load() {
+  $("status").innerHTML = '\u6b63\u5728\u6293\u53d6\u5b58\u6863\u2026';
+  fetchJson(DATA_URLS, 20000)
+    .then(function (data) { boot(data, "\u540c\u6e90 news-archive.json"); return fetchText(STAMP_URLS, 10000).then(function (s) { lastStamp = s; }).catch(function () {}); })
+    .catch(function (err) {
+      if (loaded) $("status").innerHTML = '\u5237\u65b0\u5931\u8d25\uff08' + esc(err.message) + '\uff09\uff0c\u4ecd\u663e\u793a\u4e0a\u4e00\u6b21\u5b58\u6863\u3002';
+      else $("status").innerHTML = '\u52a0\u8f7d\u5931\u8d25\uff1a' + esc(err.message) + '\u3002\u8bf7\u7a0d\u540e\u5237\u65b0\u91cd\u8bd5\u3002';
+    });
+}
+function isChanged() {
+  return fetchText(STAMP_URLS, 10000).then(function (s) {
+    if (!s) return false;
+    if (lastStamp === null) { lastStamp = s; return false; }
+    if (s !== lastStamp) { lastStamp = s; return true; }
+    return false;
+  }).catch(function () { return false; });
+}
+function startAuto() {
+  if (autoTimer) clearInterval(autoTimer);
+  autoTimer = setInterval(function () {
+    if (document.hidden) return;
+    isChanged().then(function (c) { if (c) load(); else { lastCheck = new Date(); updateFoot(); } });
+  }, AUTO_MS);
+  document.addEventListener("visibilitychange", function () { if (!document.hidden) isChanged().then(function (c) { if (c) load(); }); });
+  window.addEventListener("focus", function () { isChanged().then(function (c) { if (c) load(); }); });
+  window.addEventListener("online", function () { load(); });
+}
+load();
+startAuto();
+</script>
+</body>
+</html>

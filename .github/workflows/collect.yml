@@ -87,6 +87,8 @@ jobs:
           # 新闻看板个股明细：线上已有历史就以线上为准（首轮为空则从头开始记）
           curl -fsSL --retry 2 https://yunqingzou-bit.github.io/cls-news-dashboard/stocks.json -o out/stocks.new.json && mv out/stocks.new.json out/stocks.json || rm -f out/stocks.new.json
 
+          # 新闻筛选个股存档：线上已有历史就以线上为准（首轮为空则从头开始记）
+          curl -fsSL --retry 2 https://yunqingzou-bit.github.io/cls-news-dashboard/news-archive.json -o out/news-archive.json || true
       - name: 抓取（只跑沪深A股池，避免把个人自选股带进公开页面）
         env:
           TZ: Asia/Shanghai
@@ -99,6 +101,11 @@ jobs:
             echo "WARN: 新闻源本轮抓取失败，使用线上上一版行数据，用当前代码继续渲染页面。"
             node tools/render-fallback.js
           fi
+
+      - name: 归档新闻筛选个股（新闻篮子逐日留档）
+        env:
+          TZ: Asia/Shanghai
+        run: node tools/news-archive.js
 
       - name: 聚合多来源公开市场资讯
         env:
@@ -139,12 +146,14 @@ jobs:
 
       - name: 组装发布目录
         run: |
-          mkdir -p _site/cards _site/stockbee _site/outlook _site/stocks _site/market-review _site/ai-investment _site/research-base _site/trade-list _site/target-basket
+          mkdir -p _site/cards _site/stockbee _site/outlook _site/stocks _site/market-review _site/ai-investment _site/research-base _site/trade-list _site/target-basket _site/news-archive
           cp research-base/ashare.html research-base/hithink.html research-base/telegraph-analyzer.html _site/research-base/
           cp -R ai-investment/. _site/ai-investment/
           cp research-base/index.html _site/research-base/index.html
           cp trade-list/index.html _site/trade-list/index.html
           cp target-basket/index.html _site/target-basket/index.html
+          cp news-archive/index.html _site/news-archive/index.html
+          if [ -s out/news-archive.json ]; then cp out/news-archive.json _site/news-archive.json; fi
           cp out/cls-news-latest.html _site/index.html
           cp out/cls-news-cards.html  _site/cards/index.html
           cp market-review/index.html _site/market-review/index.html

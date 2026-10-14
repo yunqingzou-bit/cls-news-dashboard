@@ -766,6 +766,7 @@ const NAV_GROUPS = [
     { label: 'AI 投研助手', href: SITE_BASE + 'cls-news-dashboard/ai-investment/', title: '实时电报、新闻解读与热点报告' },
     { label: '统一数据底座', href: SITE_BASE + 'cls-news-dashboard/ai-investment/unified/', title: '新闻去重、等级识别、主题索引与明细查询' },
     { label: '目标篮子排序', href: SITE_BASE + 'cls-news-dashboard/target-basket/', title: '按上涨概率×期望收益排序，自动刷新' },
+    { label: '新闻筛选存档', href: SITE_BASE + 'cls-news-dashboard/news-archive/', title: '财联社新闻筛选个股的逐日存档表' },
     { label: '资讯分析报告', href: SITE_BASE + 'cls-news-dashboard/ai-investment/analyzer/' },
     { label: '选股策略回测看板', href: SITE_BASE + 'ashare-strategy-dashboard/', title: '回测区间 2026-07-13 ~ 09-11' },
   ] },

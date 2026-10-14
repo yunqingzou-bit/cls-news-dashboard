@@ -91,10 +91,10 @@ border:1px solid var(--warn-b);color:var(--warn);font-size:12.5px}
 <div class="tw">
 <table id="tbl">
 <thead><tr>
-<th data-k="day">日期</th><th data-k="name">股票</th><th data-k="bucket">分桶</th><th data-k="tier">档位</th>
+<th data-k="day">日期</th><th data-k="name">股票</th><th data-k="bucket">分桶</th><th data-k="tier">档位</th><th data-k="trend">趋势</th>
 <th data-k="close">现价</th><th data-k="chg">当日</th><th data-k="score">可执行分</th><th data-k="rr">盈亏比</th>
 <th data-k="entry">低吸位</th><th data-k="stop">止损位</th><th data-k="pot">潜力分</th><th data-k="sealed">封板</th>
-<th data-k="t1">T+1</th><th data-k="t2">T+2</th><th data-k="t3">T+3</th><th data-k="t4">T+4</th><th data-k="t5">T+5</th><th data-k="trend">趋势</th><th>分析</th>
+<th data-k="t1">T+1</th><th data-k="t2">T+2</th><th data-k="t3">T+3</th><th data-k="t4">T+4</th><th data-k="t5">T+5</th>
 </tr></thead>
 <tbody id="tbody"></tbody>
 </table>
@@ -232,9 +232,10 @@ function renderTable() {
     return "<tr>"
       + '<td class="note">' + esc(r.day) + "</td>"
       + "<td><b>" + esc(r.name) + '</b> <span class="note">' + esc(r.code) + "</span>"
-      + (num(r.sealed) ? ' <span class="bk exe">\u5c01\u677f</span>' : "") + "</td>"
+      + (num(r.sealed) ? ' <span class="bk exe">\u5c01\u677f</span>' : "") + ' <button class="mini" data-act="an" data-day="' + esc(r.day) + '" data-code="' + esc(r.code) + '">\u5206\u6790</button></td>'
       + '<td><span class="bk ' + bk + '">' + esc(BK_LABEL[r.bucket] || r.bucket) + "</span></td>"
       + "<td>" + esc(r.tier || "\u2014") + "</td>"
+      + '<td class="note">' + esc(r.trend || "\u2014") + "</td>"
       + "<td>" + f2(r.close) + "</td>"
       + '<td class="' + clsPct(r.chg) + '">' + signPct(r.chg) + "</td>"
       + "<td>" + (num(r.score) === null ? "\u2014" : r.score) + "</td>"
@@ -244,8 +245,6 @@ function renderTable() {
       + "<td>" + (num(r.pot) === null ? "\u2014" : r.pot) + "</td>"
       + "<td>" + (num(r.sealed) ? '<span class="up">\u662f</span>' : "\u2014") + "</td>"
       + "<td>" + tCell(r.t1) + "</td><td>" + tCell(r.t2) + "</td><td>" + tCell(r.t3) + "</td><td>" + tCell(r.t4) + "</td><td>" + tCell(r.t5) + "</td>"
-      + '<td class="note">' + esc(r.trend || "—") + "</td>"
-      + '<td><button class="mini" data-act="an" data-day="' + esc(r.day) + '" data-code="' + esc(r.code) + '">分析</button></td>'
       + "</tr>";
   }).join("");
 }

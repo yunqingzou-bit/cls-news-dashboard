@@ -30,6 +30,10 @@ var DEF_W = 3;
 var BAD_TEXT = ["盈利为负/PE失真","利润同比下滑","营收承压","负面公告事项","退市风险","估值较高"];
 var EXCLUDE_RE = /\*?ST|退$|退市/;
 
+/* 龙虎榜相关栏目：栏目名含「龙虎榜」即视为龙虎榜系（狙击龙虎榜 / 狙击龙虎榜午盘 /
+ * 解读龙虎榜 / 机构龙虎榜解读 / 龙虎榜 等）。仅由这类栏目命中的股票不纳入存档。 */
+var LHB_RE = /龙虎榜/;
+
 /* ==========================================================================
  * 工具
  * ========================================================================== */
@@ -251,7 +255,9 @@ function aggregate(rows) {
 
     var rt = (S.riskTxt || "") + " " + (S.holders || "");
     S.riskTags = BAD_TEXT.filter(function (t) { return rt.indexOf(t) >= 0; });
-    S.badNews = /减持|立案|问询|处罚/.test((S.holders || "").replace(/未检索到[^，。;；]*/g, ""));
+    // 减持/立案/问询/处罚：同时检查「股东动向」与「目前大事」（立案、处罚通常记录在后者）
+    S.badNews = /减持|立案|问询|处罚/.test(
+      ((S.holders || "") + " " + (S.event || "")).replace(/未检索到[^，。;；]*/g, ""));
     S.chg = num(S.chg);
   });
 
@@ -293,10 +299,10 @@ function execScore(S) {
   if (ab["5"] !== undefined && ab["10"] !== undefined && ab["20"] !== undefined) sc += 12;
   else if (ab["20"] !== undefined) sc += 6;
   if (S.trend === "上升趋势") sc += 8;
-  else if (S.trend.indexOf("上升") === 0) sc += 5;
+  else if (S.trend.indexOf("上升") >= 0) sc += 5;      // 「震荡上升」等变体同样计分
   else if (S.trend.indexOf("区间") >= 0) sc += 3;
   else if (S.trend.indexOf("反弹") >= 0) sc += 2;
-  else if (S.trend.indexOf("下降") === 0) sc -= 6;
+  else if (S.trend.indexOf("下降") >= 0) sc -= 6;
 
   // ③ 潜力模型 0–15
   if (S.potential !== null) sc += (S.potential - 50) / 50 * 7.5 + 7.5;
@@ -305,8 +311,15 @@ function execScore(S) {
   sc -= S.riskTags.length * 3;
   if (S.badNews) sc -= 5;
   if (S.limitUp) sc -= 25;
-  if (S.chg !== null && S.chg >= 9.5 && !S.limitUp) sc -= 8;
-  if (S.volRatio !== null && S.volRatio >= 100) sc -= 3;
+  // 接近涨停但未封住（按板块涨跌幅限制 10/20/5cm 各自判断，替代原硬编码 9.5%）
+  var lim = inferLimit(S.code, S.name, S.chg);
+  if (!S.limitUp && S.chg !== null && S.chg >= lim * 0.9) sc -= 8;
+  // 放量惩罚：只惩罚显著放量（与 stockbee 统计一致：放量越极端短期回撤越大），
+  // 原「量比≥前日100% 即扣 3 分」会惩罚正常温和放量，已修正。
+  if (S.volRatio !== null) {
+    if (S.volRatio >= 400) sc -= 5;
+    else if (S.volRatio >= 250) sc -= 3;
+  }
   if (!S.theme) sc -= 3;
 
   // ⑤ 数据完整性
@@ -326,13 +339,14 @@ function classify(book, topN) {
 
   var pool = book.filter(function (S) { return S.tradable; });
 
-  // 可执行：可交易 + 非涨停/涨幅达标 + 站上20日 + 档位好
-  //        + 不偏空 + 风险标签<2 + 无减持监管 + 盈亏比>=1.5 + 低吸位不高于现价
+  // 可执行：可交易 + 非涨停/未接近涨停（按板块 10/20/5cm 涨跌幅限制各自判断）
+  //        + 站上20日 + 档位好 + 不偏空 + 风险标签<2 + 无减持监管 + 盈亏比>=1.5 + 现价不低于低吸位
   var executable = pool.filter(function (S) {
+    var limE = inferLimit(S.code, S.name, S.chg);
     return !S.limitUp
       && (S.playTier === "适合" || S.playTier === "可关注")
       && above20(S)
-      && S.chg !== null && S.chg < 9.5
+      && S.chg !== null && S.chg < limE - 0.5
       && S.trend.indexOf("下降") !== 0
       && S.riskTags.length < 2
       && !S.badNews
@@ -340,12 +354,18 @@ function classify(book, topN) {
       && S.close !== null && S.entry !== null && S.close >= S.entry;
   });
 
-  // 「观察」改为三桶归类后的剩余集合（见下方 used 逻辑），不再单独判定。
-
+  // 回避：明确的负面信号直接回避，不再要求可执行分 < 20
+  //（原逻辑下「不适合」档位、减持/立案、双风险标签但催化较多的股票会滑进「观察」，不合理）：
+  //   ① 看板博弈档位明确「不适合」
+  //   ② 减持 / 立案 / 问询 / 处罚（badNews）
+  //   ③ 两项以上负面基本面标签（如 利润下滑+估值高）
+  //   ④ 下降趋势且可执行分 < 20（弱势股，保留原判定）
   var avoid = book.filter(function (S) {
     if (EXCLUDE_RE.test(S.name || "")) return false;
-    return (S.playTier === "不适合" || S.riskTags.length >= 2 || S.trend.indexOf("下降") === 0)
-      && S.execScore < 20;
+    if (S.playTier === "不适合") return true;
+    if (S.badNews) return true;
+    if (S.riskTags.length >= 2) return true;
+    return S.trend.indexOf("下降") === 0 && S.execScore < 20;
   });
 
   var review = pool.filter(function (S) { return S.potential !== null; });
@@ -404,6 +424,9 @@ function classify(book, topN) {
  * 财联社新闻筛选个股 · 每日存档
  *   输入：out/cls-news-latest.json（本轮快照，= 站点 news.json）
  *   输出：out/news-archive.json（按快照交易日留档，最多保留 MAX_DATES 天）
+ * 覆盖口径：看板出现的**全部股票**，仅剔除「只由龙虎榜相关栏目命中」的个股
+ *   （栏目名含「龙虎榜」即视为龙虎榜系）。未落入四桶（可执行/观察/回避/复盘池）
+ *   的股票按 bucket=pool 存档，保证全量覆盖。
  * 每行除筛选结果外，另存「分析页」所需的紧凑因子（趋势/均线站位/支撑阻力/量能/题材/风险/催化）
  * ========================================================================== */
 var fs = require('node:fs');
@@ -412,10 +435,25 @@ var path = require('node:path');
 var ROOT = path.join(__dirname, '..');
 var SNAP = path.join(ROOT, 'out', 'cls-news-latest.json');
 var ARCH = path.join(ROOT, 'out', 'news-archive.json');
+var DEEP = path.join(ROOT, 'out', 'deep-factors.json');
 var MAX_DATES = 45;
 var COLS = ['code', 'name', 'bucket', 'tier', 'close', 'chg', 'score', 'rr', 'entry', 'stop',
             'pot', 'sealed', 't1', 't2', 't3', 't4', 't5',
-            'trend', 'above', 'below', 'support', 'resist', 'vol', 'turn', 'theme', 'risk', 'bad', 'news'];
+            'trend', 'above', 'below', 'support', 'resist', 'vol', 'turn', 'theme', 'risk', 'bad', 'news',
+            /* 深度因子 v2：资金 / 评级与目标价 / 商誉与负债率 / 估值快照 / 技术面衍生 / 业绩 / 解禁 */
+            'mft', 'mf20',
+            'rtg', 'tp', 'orgs', 'br',
+            'gw', 'gwp', 'debt',
+            'pe', 'pb', 'mcap', 'vr',
+            'rsi', 'dd60', 'up60', 'vol20', 'ma20s', 'vrq',
+            'rpt', 'revYoY', 'npYoY', 'dkYoY', 'dkGap', 'gm', 'roe',
+            'liftD', 'liftC', 'liftP',
+            /* 深度因子 v3：研报卡片所需数值（研报标题数组由页面直读 deep-factors.json） */
+            'rev', 'np', 'dk', 'rptName',
+            'chg5', 'chg10', 'chg20', 'mf5', 'mf10', 'kdjJ', 'ma20v', 'ma60v',
+            'tpLow', 'tpHigh', 'eps26', 'eps27', 'buyCnt', 'addCnt', 'ratedCnt',
+            /* 看板新闻发布时间（该股在当前快照中最新一条新闻的 time） */
+            'ptime'];
 var N_FIXED = 17;   // t1..t5 结束位置（分析因子从第 17 个下标起）
 
 function readJsonFile(f) { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch (e) { return null; } }
@@ -439,9 +477,20 @@ function fwdT(S) {
     return (v === null || v === undefined || !isFinite(v)) ? null : Math.round(Number(v) * 100) / 100;
   });
 }
-function bkIdx(b) { return b === 'executable' ? 0 : (b === 'watch' ? 1 : (b === 'avoid' ? 2 : 3)); }
+function bkIdx(b) {
+  return b === 'executable' ? 0 : (b === 'watch' ? 1 : (b === 'avoid' ? 2 : (b === 'review' ? 3 : 4)));
+}
 function nz(v) { return (v === null || v === undefined) ? -1e9 : v; }
 function rnd(v, d) { return (v === null || v === undefined) ? null : Math.round(v * d) / d; }
+
+/** 是否仅由龙虎榜相关栏目命中（是 → 不纳入存档） */
+function isLhbOnly(S) {
+  if (!S.catalogNames || !S.catalogNames.length) return true;
+  for (var i = 0; i < S.catalogNames.length; i++) {
+    if (!LHB_RE.test(S.catalogNames[i])) return false;
+  }
+  return true;
+}
 
 function main() {
   var snap = readJsonFile(SNAP);
@@ -455,16 +504,42 @@ function main() {
     (buckets[bk] || []).forEach(function (S) { if (bMap[S.code] === undefined) bMap[S.code] = bk; });
   });
 
+  // 覆盖口径：看板全部股票，剔除仅由龙虎榜相关栏目命中的个股；
+  // 未落入四桶的记为 pool（纳入），保证全量覆盖、不按分数漏股。
+  var cover = book.filter(function (S) { return !isLhbOnly(S); });
+
+  // 深度因子（主力资金/机构评级/目标价/商誉），由 tools/deep-factors.js 先行产出
+  var deep = (readJsonFile(DEEP) || {}).factors || {};
+
   var rowsMap = {};
-  book.forEach(function (S) {
-    if (!bMap[S.code]) return;
+  var poolCount = 0;
+  var deepCount = 0;
+  cover.forEach(function (S) {
+    if (!bMap[S.code]) poolCount++;
+    var df = deep[S.code] || {};
+    if (df.mf20 !== null && df.mf20 !== undefined) deepCount++;
+    function dnum(k) { var x = Number(df[k]); return (df[k] === null || df[k] === undefined || !isFinite(x)) ? null : x; }
     var t = fwdT(S);
-    rowsMap[S.code] = [S.code, S.name, bMap[S.code], S.playTier || '', S.close, S.chg,
+    rowsMap[S.code] = [S.code, S.name, bMap[S.code] || 'pool', S.playTier || '', S.close, S.chg,
       rnd(S.execScore, 10), rnd(S.rr, 100), S.entry, S.stop, S.potential, (S.limitUp ? 1 : 0),
       t[0], t[1], t[2], t[3], t[4],
       S.trend || '', maKeys(S.position && S.position.above), maKeys(S.position && S.position.below),
       S.support, S.resist, rnd(S.volRatio, 10), rnd(S.turnover, 100),
-      (S.theme || '').slice(0, 28), (S.riskTags || []).join('|'), (S.badNews ? 1 : 0), S.newsCount];
+      (S.theme || '').slice(0, 28), (S.riskTags || []).join('|'), (S.badNews ? 1 : 0), S.newsCount,
+      /* 深度因子 v2 */
+      dnum('mft'), dnum('mf20'),
+      df.rtg || null, dnum('tp'), dnum('orgs'), dnum('buyRatio'),
+      dnum('gw'), dnum('gwp'), dnum('debt'),
+      dnum('pe'), dnum('pb'), dnum('mcap'), dnum('vr'),
+      dnum('rsi14'), dnum('dd60'), dnum('up60'), dnum('vol20'), dnum('ma20s'), dnum('vrq'),
+      df.rpt || null, dnum('revYoY'), dnum('npYoY'), dnum('dkYoY'), dnum('dkGap'), dnum('gm'), dnum('roe'),
+      df.liftDate || null, dnum('liftCap'), dnum('liftPct'),
+      /* 深度因子 v3 */
+      dnum('rev'), dnum('np'), dnum('dk'), df.rptName || null,
+      dnum('chg5'), dnum('chg10'), dnum('chg20'), dnum('mf5'), dnum('mf10'), dnum('kdjJ'), dnum('ma20v'), dnum('ma60v'),
+      dnum('tpLow'), dnum('tpHigh'), dnum('eps26'), dnum('eps27'), dnum('buyCnt'), dnum('addCnt'), dnum('ratedCnt'),
+      /* 看板新闻发布时间：aggregate 已按时间倒序，news[0] 即最新一条 */
+      (S.news && S.news[0] && S.news[0].time) ? String(S.news[0].time) : null];
   });
 
   var arch = readJsonFile(ARCH) || { version: 2 };
@@ -472,8 +547,9 @@ function main() {
   var cur = null;
   arch.dates.forEach(function (d) { if (d && d.day === day) cur = d; });
   var counts = {
-    total: book.length, executable: buckets.counts.executable, watch: buckets.counts.watch,
-    avoid: buckets.counts.avoid, review: buckets.counts.review
+    total: cover.length, lhbOnly: book.length - cover.length,
+    executable: buckets.counts.executable, watch: buckets.counts.watch,
+    avoid: buckets.counts.avoid, review: buckets.counts.review, pool: poolCount
   };
   if (!cur) { cur = { day: day, rows: [] }; arch.dates.push(cur); }
   cur.counts = counts;
@@ -496,7 +572,8 @@ function main() {
 
   fs.mkdirSync(path.dirname(ARCH), { recursive: true });
   fs.writeFileSync(ARCH, JSON.stringify(arch), 'utf8');
-  console.log('\u5f52\u6863 ' + day + ' | \u7bee\u5b50 ' + book.length + ' \u53ea | \u53ef\u6267\u884c ' + counts.executable
-    + ' | \u5b58\u6863 ' + arch.dates.length + ' \u5929 | \u672c\u65e5\u884c ' + merged.length);
+  console.log('\u5f52\u6863 ' + day + ' | \u8986\u76d6 ' + cover.length + ' \u53ea\uff08\u4ec5\u9f99\u864e\u699c\u547d\u4e2d\u5254\u9664 '
+    + (book.length - cover.length) + ' \u53ea\uff09| \u53ef\u6267\u884c ' + counts.executable
+    + ' | \u7eb3\u5165 ' + poolCount + ' | \u6df1\u5ea6\u56e0\u5b50 ' + deepCount + ' \u53ea | \u5b58\u6863 ' + arch.dates.length + ' \u5929 | \u672c\u65e5\u884c ' + merged.length);
 }
 main();

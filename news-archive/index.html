@@ -1,8 +1,8 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<html lang="zh-CN" data-page-node-id="JNS3GeZqIgv0P9bLPaXEJC">
+<head data-page-node-id="RtM6s0QRnZqYOG1lEcCCAW">
+<meta charset="utf-8" data-page-node-id="MndBHpGlB5C0GVslGWgZux">
+<meta name="viewport" content="width=device-width,initial-scale=1" data-page-node-id="iEA3iTWboizMpKr2Q8vwNj">
 <title>财联社新闻筛选个股 · 存档案</title>
 <style>
 :root{--up:#d93025;--down:#0f9d58;--ink:#16181d;--mut:#8a929e;--line:#e5e8ec;
@@ -34,7 +34,13 @@ display:flex;gap:14px;flex-wrap:wrap;align-items:center;font-size:13px}
 .tab{font:inherit;font-size:13px;padding:6px 13px;border-radius:8px;cursor:pointer;border:1px solid var(--line);background:#fff;color:#5b6472}
 .tab.on{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:600}
 .cnt{color:var(--mut);font-size:12.5px;margin-left:auto}
-.tw{overflow-x:auto;background:var(--card);border:1px solid var(--line);border-radius:11px}
+.tw{overflow-x:auto;background:var(--card);border:1px solid var(--line);border-radius:11px 11px 0 0;scrollbar-width:none}
+.tw::-webkit-scrollbar{display:none}
+/* 固定吸附在视口底部的同步横向滚动条：列表再长也随时可用 */
+.hbar{position:sticky;bottom:0;z-index:40;height:15px;overflow-x:auto;overflow-y:hidden;
+background:var(--card);border:1px solid var(--line);border-top:none;border-radius:0 0 11px 11px;
+box-shadow:0 -3px 8px rgba(0,0,0,.05)}
+.hbar .in{height:1px}
 table{border-collapse:collapse;width:100%;font-size:13px;min-width:1080px}
 th{position:sticky;top:0;background:#f8fafc;color:#5b6472;font-weight:600;padding:9px 10px;text-align:left;
 border-bottom:1px solid var(--line);cursor:pointer;white-space:nowrap;user-select:none}
@@ -47,6 +53,7 @@ tr:hover td{background:#fafbfc}
 .bk.watch{background:#e7f6ec;color:#1b7f4b;border-color:#cfeada}
 .bk.avoid{background:var(--bad-l);color:var(--bad);border-color:var(--bad-b)}
 .bk.hard{background:var(--bad);color:#fff;border-color:var(--bad)}
+.bk.pool{background:#f2f4f7;color:#5b6472;border-color:#e5e8ec}
 .tag{font-size:11px;padding:1px 7px;border-radius:999px;background:#f2f4f7;color:#5b6472;margin-right:3px;white-space:nowrap}
 .tag.bad{background:var(--warn-l);color:var(--warn)}
 .note{color:var(--mut);font-size:12.5px}
@@ -58,6 +65,8 @@ border:1px solid var(--warn-b);color:var(--warn);font-size:12.5px}
 </style>
 <style>
 .mini{font:inherit;font-size:11.5px;padding:2px 8px;border-radius:6px;border:1px solid var(--acc-b);background:var(--acc-l);color:var(--acc);cursor:pointer;white-space:nowrap}
+.stk{color:var(--acc);text-decoration:none;border-bottom:1px dashed var(--acc-b);cursor:pointer}
+.stk:hover{color:var(--up);border-bottom-color:var(--up)}
 .mini:hover{background:#e2eefa}
 .mask{position:fixed;inset:0;background:rgba(16,24,40,.45);display:flex;align-items:flex-start;justify-content:center;padding:20px 10px;z-index:99;overflow:auto}
 .modal{background:#fff;border-radius:14px;max-width:980px;width:100%;padding:18px 20px 24px;box-shadow:0 22px 60px rgba(16,24,40,.32)}
@@ -100,52 +109,57 @@ border:1px solid var(--warn-b);color:var(--warn);font-size:12.5px}
 .evs{color:#8a929e;font-size:11.5px;margin-top:2px;word-break:break-word}
 </style>
 </head>
-<body>
-<div class="wrap">
-<h1>财联社新闻筛选个股 · 存档案</h1>
-<div class="sub" id="sub">正在加载存档…</div>
-<div class="note" id="status" style="margin-bottom:10px"></div>
+<body data-page-node-id="E14z98kqVHXFFdGCeMAZ4x">
+<div class="wrap" data-page-node-id="NHtskXosNN7EAfZljpOO70">
+<h1 data-page-node-id="HYXtwe8U2wlIcJgLoOeN23">财联社新闻筛选个股 · 存档案</h1>
+<div class="sub" id="sub" data-page-node-id="z7ABnE3zuyTYo3E9EjXXns">正在加载存档…</div>
+<div class="note" id="status" style="margin-bottom:10px" data-page-node-id="vUOHy6yPzAhNELaHv16tED"></div>
 
-<div class="tools" id="tools"></div>
+<div class="tools" id="tools" data-page-node-id="m1BUriMEWMQvNgpCDh6zYw"></div>
 
-<div class="tw">
-<table id="tbl">
-<thead><tr>
-<th data-k="day">日期</th><th data-k="name">股票</th><th data-k="bucket">分桶</th><th data-k="tier">档位</th><th data-k="trend">趋势</th>
-<th data-k="close">现价</th><th data-k="chg">当日</th><th data-k="score">可执行分</th><th data-k="rr">盈亏比</th>
-<th data-k="entry">低吸位</th><th data-k="stop">止损位</th><th data-k="pot">潜力分</th><th data-k="sealed">封板</th>
-<th data-k="t1">T+1</th><th data-k="t2">T+2</th><th data-k="t3">T+3</th><th data-k="t4">T+4</th><th data-k="t5">T+5</th>
+<div class="tw" data-page-node-id="FoqtBMW7kMFicRqIptMpjp">
+<table id="tbl" data-page-node-id="Uki0ZjH5dobB0ENIlKYZFt">
+<thead data-page-node-id="eqxstfHAPS00pyYV4Ks0Kd"><tr data-page-node-id="Q7ZZ8y1kAiHiNWAWk5cbgf">
+<th data-k="ptime" data-page-node-id="3HQ219PLE5PwEQd86qCvSp">发布时间</th><th data-k="name" data-page-node-id="yEjju1T5L9EYLJ3wPaQ2ZA">股票</th><th data-k="bucket" data-page-node-id="M9YSO2PrsPHBIMHw9w7Jm9">分桶</th><th data-k="tier" data-page-node-id="SlWJVaeipAE7iK3vV6UGcL">档位</th><th data-k="trend" data-page-node-id="U1yG52WWBX1ajY1Sp0kfnf">趋势</th>
+<th data-k="close" data-page-node-id="FRKqF6pagISgHk0YgTOTKq">现价</th><th data-k="chg" data-page-node-id="SbGmCyoId55YjknNDMiBsp">当日</th><th data-k="score" data-page-node-id="GSi9CBEMUlVwGcGXvPvxCQ">可执行分</th><th data-k="rr" data-page-node-id="IHBdvxQ45HPV5tvaHuh5GF">盈亏比</th>
+<th data-k="entry" data-page-node-id="ls2iQ4CojeLCMcWB1OemrP">低吸位</th><th data-k="stop" data-page-node-id="hxURWkm5qKeCc6ZGA2zphH">止损位</th><th data-k="pot" data-page-node-id="AjDnF2BBKWYit5c5OfSFuC">潜力分</th><th data-k="sealed" data-page-node-id="ASHyVb3AbnU7VqWG2tTy80">封板</th>
+<th data-k="t1" data-page-node-id="oX0HFEzzhEB4kvqIzcLTMj">T+1</th><th data-k="t2" data-page-node-id="OCRRcChHWfQzn6pr1tszk4">T+2</th><th data-k="t3" data-page-node-id="6My6TJgzrVQkG54JVpiMTG">T+3</th><th data-k="t4" data-page-node-id="5FHHADdLBr40m3AiB149ke">T+4</th><th data-k="t5" data-page-node-id="BuQQCPo2FWTVGy3xh3PyxJ">T+5</th>
 </tr></thead>
-<tbody id="tbody"></tbody>
+<tbody id="tbody" data-page-node-id="4AJx5biAmbMyMnY7JIkuYf"></tbody>
 </table>
 </div>
+<div class="hbar" id="hbar" title="左右拖动查看更多列" data-page-node-id="Bf1rbXErg3zBGu9sp4OULF"><div class="in" id="hbarIn" data-page-node-id="gLJ1c4PPkGExAsq9I3UCSN"></div></div>
 
-<div class="panel" style="margin-top:18px">
-<h3>口径说明</h3>
-<div class="meth">
-本页把<b>每个快照交易日</b>的「财联社新闻筛选篮子」留档成一张表：
-篮子内每一只股票都保留当日的<b>分桶（可执行 / 观察 / 回避）、博弈档位、可执行分、盈亏比、低吸位、止损位、潜力分、是否收盘封板</b>，
-以及看板快照自带的 <b>T+1 ~ T+5</b> 后续涨跌。
-<ul>
-<li><b>数据来源</b>：看板 <code>news.json</code> 快照（财联社目标栏目新闻 × 个股）经同一套 aggregate / classify 口径重算，与「可交易清单」页面一致。</li>
-<li><b>归档节奏</b>：每轮快照（盘中约 10 分钟）追加到当日，按日去重，最多保留最近 45 个快照日。</li>
-<li><b>T+n 口径</b>：取自快照自带的 forward 字段，随快照滚动补齐；超出保留窗口的旧记录停在最后一次见到的值。</li>
-<li><b>不构成投资建议</b>：价位为位置参考，不含滑点与流动性。</li><li><b>三周期分析</b>：点「分析」按<b>短期(1~5日) / 中期(数周~3月) / 长期(3月+)三个维度</b>给出可操作结论，每个结论都逐条列出依据（信号及其加减分）；若该股仍在当前快照窗口内，还会附上「资料证据」（行情量价 / 均线站位 / 关键位 / 潜力 / 估值与财务 / 业绩事件 / 股东动向 / 风险标签 / 消息面，每条标注来源）与技术面、调研结论原文。</li><li><b>表格标签</b>：股票名旁「分析」后的 <b>短期 / 中期 / 长期</b> 小标签表示该周期为<b>可操作</b>（实心）或<b>谨慎可操作</b>（虚线）；无标签即观察或不建议。点标签或按钮均可打开完整分析。</li>
+<div class="panel" style="margin-top:18px" data-page-node-id="HHAzGqQSzqRyFXgHNbcvYj">
+<h3 data-page-node-id="yeN64QLtu1HZasxUKQLjCb">口径说明</h3>
+<div class="meth" data-page-node-id="SoxfC9P68cTWUpn0w9sAxi">
+本页把<b data-page-node-id="HEMaiCpNIOCMRONMgz2I1f">每个快照交易日</b>的「财联社新闻筛选篮子」留档成一张表：
+篮子内每一只股票都保留当日的<b data-page-node-id="m384ndSVokHKZvNXSZdMMi">分桶（可执行 / 观察 / 回避）、博弈档位、可执行分、盈亏比、低吸位、止损位、潜力分、是否收盘封板</b>，
+以及看板快照自带的 <b data-page-node-id="IGARwoShy0zZA0W5tO1Qp5">T+1 ~ T+5</b> 后续涨跌。
+<ul data-page-node-id="FTtjpouvxHQOBJ31exKx1y">
+<li data-page-node-id="gDFtZRgefEtix1rLYVBu5J"><b data-page-node-id="314Z4xCK8RQ8leF41SkuZR">覆盖口径</b>：看板 <code data-page-node-id="lyOmt6CttGpfrHBUpzGxzH">news.json</code> 快照中出现的<b data-page-node-id="p1UqDN3aQZ1WQdygfWH0RE">全部股票</b>（剔除仅由「龙虎榜」相关栏目命中的个股，栏目名含「龙虎榜」即视为龙虎榜系）。四桶（可执行 / 观察 / 回避 / 复盘池）沿用「可交易清单」的 aggregate / classify 口径；未落入四桶的股票以<b data-page-node-id="Zs5Ej2j02zgpccWfa2wcSv">「纳入」</b>桶全量归档，不按分数漏股。</li>
+<li data-page-node-id="cPOqxxDywYY34ChVrjrzg0"><b data-page-node-id="PI6AuSKYtk0A6YJlyrXBRZ">深度因子</b>（按《深度研报分析流程》采集）：① <b data-page-node-id="bZIlT6Ri99uxXgeSVQyNrQ">主力资金流向</b>（当日 + 近 20 日，东财主源 / 新浪备用）；② <b data-page-node-id="fWQV1uVuwZZipIJ9VfAvUp">机构评级与一致目标价</b>（近 90 天研报：评级、机构家数、买入+增持占比、目标价均值与隐含空间）；③ <b data-page-node-id="SdaAEwjjP7RWbAgoE6ReUF">商誉与负债率</b>（最新报告期）；④ <b data-page-node-id="vR2CwQinK5kvGnXpyLFGE4">估值快照</b>（PE/PB/总市值/量比，腾讯批量行情）；⑤ <b data-page-node-id="CxzQKF2XDgfYflHzlsoot1">技术面衍生</b>（RSI14、距 60 日高点回撤、20 日波动率、MA20 斜率、量能比，60 日日K 计算）；⑥ <b data-page-node-id="VPJz11YTiFXzYMDo1w1S79">业绩因子</b>（营收/归母/扣非同比、毛利率、ROE，含归母 vs 扣非背离校验）；⑦ <b data-page-node-id="wRNoYNw9XkgrpnZMuJiraM">限售解禁</b>（未来最近一次日期/市值/占比）。由云端 deep-factors.js 采集并随快照存档；未取得时显示「—」，不影响其余结论。</li>
+<li data-page-node-id="Ky5mU5SeJ9gOeE0TdrGRRj"><b data-page-node-id="PgKHdNuqJc8RSMPvoiAhaQ">交叉验证裁决</b>：分析弹窗在综合结论下方给出「技术面 × 基本面 × 资金面」三维校验——目标价验证（现价超一致目标价 → 不追高）、逻辑冲突降级（技术面强但亏损/PE 极高 → 事件博弈降档）、非经常损益校验（表观增速与扣非背离 → 以扣非定性）、风险一票否决（商誉占比 ≥30%、亏损纯题材、PE>150）、解禁日历（90 日内大额解禁提示减仓窗口）、位置提示（贴近 60 日新高追高谨慎）。</li>
+<li data-page-node-id="8JV9R56U8oQhGBZRxe1mrK"><b data-page-node-id="qnBDwkg54cyceCdA6O9Jvs">发布时间</b>：表格「发布时间」列为该股在财联社看板中<b data-page-node-id="xcCAgZbR2ZvUvDlXdLhOxd">最新一条相关新闻的发布时间</b>（取自快照 time 字段）；顶部日期筛选仍按快照日分组。点击<b data-page-node-id="jCDlaNFushsHUo2dBdyAle">股票名称</b>可在腾讯自选股（gu.qq.com）打开个股页。</li>
+<li data-page-node-id="RqGswXSt5NU8XW6XPOcs4g"><b data-page-node-id="Togyrygg6RsGHbZMhTcxLi">档位 / 分桶 / 评分逻辑</b>：① <b data-page-node-id="lR6vs7BeyvRVWj2Vxje4Pu">档位</b>取看板多条新闻中更强的博弈档位（适合 &gt; 可关注 &gt; 中性 &gt; 不适合 &gt; 样本不足），价位随档位同步；② <b data-page-node-id="wW85Cc0qXx7sunwxShYw3X">可执行</b> = 可交易 + 未封板且未接近涨停（按 10/20/5cm 板块限制各自判断，替代原硬编码 9.5%）+ 站上 20 日线 + 非下降趋势 + 风险标签 &lt; 2 + 无减持/立案 + 盈亏比 ≥1.5 + 现价不低于低吸位；③ <b data-page-node-id="0aIJjMwdNAx0laBPewbArI">回避修正</b>：原逻辑要求可执行分 &lt; 20 才回避，导致「不适合」档位、减持/立案、双风险标签但催化较多的股票滑入观察——现改为上述明确负面信号<b data-page-node-id="EiUA45J3pDglhAqMxfEBMC">直接回避</b>（下降趋势仍保留分数门槛）；④ <b data-page-node-id="WdHHXS289sKpDFGoVyslPe">量能惩罚修正</b>：原「量比 ≥ 前日 100% 即扣分」会惩罚正常温和放量，改为 ≥250% 扣 3 分、≥400% 扣 5 分（与其 Stockbee 统计「放量越极端短期回撤越大」一致）；⑤ <b data-page-node-id="eYfO2qdVbkOfPtZA1rc9NV">潜力分</b>沿用看板模型分（0–100）线性映射；⑥ 盈亏比目标价统一按现价 +8% 估算（口径一致的保守假设）。</li>
+<li data-page-node-id="IdSPZbTba87Dp0Y54CE8sL"><b data-page-node-id="wBxcfdHIFC2TzMYd5se2jj">归档节奏</b>：每轮快照（盘中约 10 分钟）追加到当日，按日去重，最多保留最近 45 个快照日。</li>
+<li data-page-node-id="aZgQX7bXwVweOFvJNv3ZPl"><b data-page-node-id="uB4lMPEqsYDZpbSHwArwGE">T+n 口径</b>：取自快照自带的 forward 字段，随快照滚动补齐；超出保留窗口的旧记录停在最后一次见到的值。</li>
+<li data-page-node-id="64o7seKDLEvLZJonoJzicM"><b data-page-node-id="8KQvX6ootBFhFiMDFMHlzF">不构成投资建议</b>：价位为位置参考，不含滑点与流动性。</li><li data-page-node-id="V6K5YHH3XeS0WLNs3moApL"><b data-page-node-id="6CB743eXB6javRlXADEHqB">分析弹窗（六模块深研卡）</b>：点「分析」按参考研报形式给出<b data-page-node-id="XDjUweuK3U3HFWe3krGyfO">最新业绩（报告期营收/归母/扣非同比、毛利率、ROE）、核心逻辑（近 90 天机构研报观点归纳）、技术面与资金面（5/10/20 日涨跌、MA20 站位、距 60 日高、量能、RSI/KDJ、主力多周期净流入）、估值与机构预期（PE/PB、评级分布、一致目标价区间与隐含空间、EPS 盈利预测）、风险（商誉/负债/解禁/估值透支/背离/资金撤离）、操作建议（买点+止损+目标+仓位三要素，含交叉验证裁决）</b>——六模块全部由云端 deep-factors.js <b data-page-node-id="r6UoISAUj9jUMMbkDNbCcx">全网因子归纳生成，不引用财联社看板的调研结论原文</b>；仅「已实现表现（T+1~T+5）」与「相关新闻」两栏来自看板。</li><li data-page-node-id="qdjCN1lNgfsXaS15sUiVek"><b data-page-node-id="4yKuGesE8l1256Tfidblie">表格标签</b>：股票名旁「分析」后的 <b data-page-node-id="KfulKCKjSUANr7AYiAouxe">短期 / 中期 / 长期</b> 小标签表示该周期为<b data-page-node-id="K5DKKTvq5RePx2Ka8D6LWZ">可操作</b>（实心）或<b data-page-node-id="RAveoGG6rEpPfgzV3yGepv">谨慎可操作</b>（虚线）；无标签即观察或不建议。点标签或按钮均可打开完整分析。</li>
 </ul>
 </div>
 </div>
 
-<div class="note" id="foot" style="margin-top:14px"></div>
-<div id="modalHost" style="display:none"></div>
+<div class="note" id="foot" style="margin-top:14px" data-page-node-id="I9edbMNgvPWsCOyO2ii60G"></div>
+<div id="modalHost" style="display:none" data-page-node-id="TcYNKNwCMLn2O98z19wIhC"></div>
 </div>
 
 <script>
 var DATA_URLS = ["../news-archive.json", "https://yunqingzou-bit.github.io/cls-news-dashboard/news-archive.json"];
 var STAMP_URLS = ["../updated.txt", "https://yunqingzou-bit.github.io/cls-news-dashboard/updated.txt"];
 var AUTO_MS = 60000;
-var BK_LABEL = { executable: "\u53ef\u6267\u884c", watch: "\u89c2\u5bdf", avoid: "\u56de\u907f", review: "\u590d\u76d8\u6c60" };
-var BK_CLS = { executable: "exe", watch: "watch", avoid: "avoid", review: "watch" };
-var BK_PRIO = { executable: 0, watch: 1, avoid: 2, review: 3 };
+var BK_LABEL = { executable: "\u53ef\u6267\u884c", watch: "\u89c2\u5bdf", avoid: "\u56de\u907f", review: "\u590d\u76d8\u6c60", pool: "\u7eb3\u5165" };
+var BK_CLS = { executable: "exe", watch: "watch", avoid: "avoid", review: "watch", pool: "pool" };
+var BK_PRIO = { executable: 0, watch: 1, avoid: 2, review: 3, pool: 4 };
 
 var STATE = { rows: [], dates: [], day: "", bucket: "all", q: "", sortK: "", sortAsc: false };
 
@@ -185,7 +199,7 @@ function fetchText(urls, ms) {
 }
 
 function statCounts(rows) {
-  var o = { total: rows.length, executable: 0, watch: 0, avoid: 0, review: 0 };
+  var o = { total: rows.length, executable: 0, watch: 0, avoid: 0, review: 0, pool: 0 };
   rows.forEach(function (r) { if (o[r.bucket] !== undefined) o[r.bucket]++; });
   return o;
 }
@@ -202,7 +216,7 @@ function renderTools() {
   var opts = ['<option value="">\u5168\u90e8\u65e5\u671f</option>']
     .concat(STATE.dates.map(function (d) { return '<option value="' + esc(d) + '"' + (STATE.day === d ? " selected" : "") + '>' + esc(d) + "</option>"; }));
   var c = statCounts(STATE.rows);
-  var bks = [["all", "\u5168\u90e8", STATE.rows.length], ["executable", "\u53ef\u6267\u884c", c.executable], ["watch", "\u89c2\u5bdf", c.watch], ["avoid", "\u56de\u907f", c.avoid]];
+  var bks = [["all", "\u5168\u90e8", STATE.rows.length], ["executable", "\u53ef\u6267\u884c", c.executable], ["watch", "\u89c2\u5bdf", c.watch], ["avoid", "\u56de\u907f", c.avoid], ["review", "\u590d\u76d8\u6c60", c.review], ["pool", "\u7eb3\u5165", c.pool]];
   $("tools").innerHTML =
     '<select id="fday" style="font:inherit;font-size:13px;padding:7px 10px;border:1px solid var(--line);border-radius:8px">' + opts.join("") + "</select>"
     + bks.map(function (b) {
@@ -249,9 +263,10 @@ function renderTable() {
   $("cnt").textContent = "\u5171 " + list.length + " \u6761";
   $("tbody").innerHTML = list.map(function (r) {
     var bk = BK_CLS[r.bucket] || "watch";
+    var pub = r.ptime ? String(r.ptime).slice(5, 16) : (r.day || "\u2014");
     return "<tr>"
-      + '<td class="note">' + esc(r.day) + "</td>"
-      + "<td><b>" + esc(r.name) + '</b> <span class="note">' + esc(r.code) + "</span>"
+      + '<td class="note">' + esc(pub) + "</td>"
+      + "<td><b><a class=\"stk\" target=\"_blank\" rel=\"noopener\" title=\"\u5728\u817e\u8baf\u81ea\u9009\u80a1\u6253\u5f00\" href=\"https://gu.qq.com/" + esc(r.code) + "\">" + esc(r.name) + "</a></b> <span class=\"note\">" + esc(r.code) + "</span>"
       + (num(r.sealed) ? ' <span class="bk exe">\u5c01\u677f</span>' : "") + ' <button class="mini" data-act="an" data-day="' + esc(r.day) + '" data-code="' + esc(r.code) + '">\u5206\u6790</button>' + horizonTags(r, NEWS_IDX ? NEWS_IDX[r.code] || null : null) + "</td>"
       + '<td><span class="bk ' + bk + '">' + esc(BK_LABEL[r.bucket] || r.bucket) + "</span></td>"
       + "<td>" + esc(r.tier || "\u2014") + "</td>"
@@ -267,6 +282,7 @@ function renderTable() {
       + "<td>" + tCell(r.t1) + "</td><td>" + tCell(r.t2) + "</td><td>" + tCell(r.t3) + "</td><td>" + tCell(r.t4) + "</td><td>" + tCell(r.t5) + "</td>"
       + "</tr>";
   }).join("");
+  if (typeof syncHbar === "function") syncHbar();
 }
 
 function currentList() {
@@ -279,7 +295,7 @@ function currentList() {
 }
 
 function exportCsv() {
-  var cols = [["day", "\u65e5\u671f"], ["name", "\u80a1\u7968"], ["code", "\u4ee3\u7801"], ["bucket", "\u5206\u6876"], ["tier", "\u6863\u4f4d"],
+  var cols = [["ptime", "\u53d1\u5e03\u65f6\u95f4"], ["day", "\u5b58\u6863\u65e5"], ["name", "\u80a1\u7968"], ["code", "\u4ee3\u7801"], ["bucket", "\u5206\u6876"], ["tier", "\u6863\u4f4d"],
     ["close", "\u73b0\u4ef7"], ["chg", "\u5f53\u65e5%"], ["score", "\u53ef\u6267\u884c\u5206"], ["rr", "\u76c8\u4e8f\u6bd4"],
     ["entry", "\u4f4e\u5438\u4f4d"], ["stop", "\u6b62\u635f\u4f4d"], ["pot", "\u6f5c\u529b\u5206"], ["sealed", "\u5c01\u677f"],
     ["t1", "T+1"], ["t2", "T+2"], ["t3", "T+3"], ["t4", "T+4"], ["t5", "T+5"]];
@@ -307,15 +323,45 @@ Array.prototype.forEach.call(document.querySelectorAll("th[data-k]"), function (
   th.onclick = function () {
     var k = th.getAttribute("data-k");
     if (STATE.sortK === k) STATE.sortAsc = !STATE.sortAsc;
-    else { STATE.sortK = k; STATE.sortAsc = !(k === "close" || k === "score" || k === "rr" || k === "pot" || k === "chg"); }
+    else { STATE.sortK = k; STATE.sortAsc = !(k === "close" || k === "score" || k === "rr" || k === "pot" || k === "chg" || k === "ptime"); }
     renderTable();
   };
 });
+
+/* ===== 底部固定横向滚动条（与表格双向同步） ===== */
+var twEl = document.querySelector(".tw"), hbarEl = $("hbar"), hbarIn = $("hbarIn");
+var hbarLock = false;
+function syncHbar() {
+  if (!twEl || !hbarEl) return;
+  var of = twEl.scrollWidth - twEl.clientWidth;
+  hbarEl.style.display = of > 1 ? "" : "none";   // 无横向溢出时隐藏，不占位
+  hbarIn.style.width = twEl.scrollWidth + "px";
+  hbarEl.scrollLeft = twEl.scrollLeft;
+}
+if (twEl && hbarEl) {
+  twEl.addEventListener("scroll", function () {
+    if (hbarLock) return; hbarLock = true; hbarEl.scrollLeft = twEl.scrollLeft; hbarLock = false;
+  });
+  hbarEl.addEventListener("scroll", function () {
+    if (hbarLock) return; hbarLock = true; twEl.scrollLeft = hbarEl.scrollLeft; hbarLock = false;
+  });
+  window.addEventListener("resize", syncHbar);
+}
 
 
 /* ===== 三周期分析 ===== */
 var NEWS_URLS = ["../news.json", "https://yunqingzou-bit.github.io/cls-news-dashboard/news.json"];
 var NEWS_IDX = null, NEWS_ERR = false;
+/* 深度因子全量数据（含研报标题数组 rpts；存档行只留数值列） */
+var DEEP_URLS = ["../deep-factors.json", "https://yunqingzou-bit.github.io/cls-news-dashboard/deep-factors.json"];
+var DEEP_MAP = null, DEEP_ERR = false;
+function ensureDeep() {
+  if (DEEP_MAP || DEEP_ERR) return Promise.resolve(DEEP_MAP || {});
+  return fetchJsonRaw(DEEP_URLS, 15000).then(function (d) {
+    DEEP_MAP = (d && d.factors) || {};
+    return DEEP_MAP;
+  }).catch(function () { DEEP_ERR = true; DEEP_MAP = {}; return DEEP_MAP; });
+}
 function r1(v) { return Math.round(v * 10) / 10; }
 function arr(s) { return String(s || "").split("/").filter(Boolean); }
 function hasAll(list, keys) { for (var i = 0; i < keys.length; i++) { if (list.indexOf(keys[i]) < 0) return false; } return true; }
@@ -397,6 +443,18 @@ function analyze(r, en) {
   if (vr !== null && vr >= 100) aS(-1, "\u91cf\u80fd\u66b4\u589e\uff08\u91cf\u8f83\u524d\u65e5 +" + r.vol + "%\uff09\uff1a\u6ce2\u52a8\u52a0\u5927\uff0c\u9700\u9632\u51b2\u9ad8\u56de\u843d");
   else if (vr !== null && vr > 0) aS(0.5, "\u91cf\u80fd\u6e29\u548c\u653e\u5927\uff08\u91cf\u8f83\u524d\u65e5 +" + r.vol + "%\uff09");
   else if (vr !== null && vr <= 0) aS(0.5, "\u7f29\u91cf\uff08\u91cf\u8f83\u524d\u65e5 " + r.vol + "%\uff09\uff1a\u629b\u538b\u4e0d\u5927");
+  var mft = num(r.mft), mf20 = num(r.mf20), tp = num(r.tp);
+  if (mft !== null) {
+    if (mft >= 0.3) aS(1, "当日主力净流入 +" + mft + " 亿（超大单+大单）");
+    else if (mft <= -0.5) aS(-1, "当日主力净流出 " + mft + " 亿");
+  }
+  var rsi = num(r.rsi), vrq = num(r.vr);
+  if (rsi !== null) {
+    if (rsi >= 78) aS(-0.5, "RSI14 " + rsi + "：短线过热，追高易回撤");
+    else if (rsi <= 28) aS(0.5, "RSI14 " + rsi + "：短线超卖，反抽窗口");
+  }
+  if (vrq !== null && vrq >= 1.5) aS(0.5, "量能比 5日/20日 " + vrq + "：放量，资金参与度高");
+  else if (vrq !== null && vrq < 0.6) aS(-0.5, "量能比 " + vrq + "：明显缩量，动能不足");
   if (num(r.t1) !== null) SR.push({ d: 0, t: "\uff08\u53c2\u8003\uff09T+1 \u5b9e\u9645\u8868\u73b0 " + signPct(r.t1) + "\uff08\u5df2\u5b9e\u73b0\uff0c\u4e0d\u8ba1\u5165\u8bc4\u5206\uff09" });
 
   var m = 0, MR = [];
@@ -418,6 +476,37 @@ function analyze(r, en) {
   else aM(-1.5, "\u53d7\u538b " + press.join("/") + " \u65e5\u7ebf\uff1a\u4e0a\u65b9\u5957\u7262\u76d8\u8f83\u91cd");
   if (r.bucket === "executable") aM(0.5, "\u53ef\u6267\u884c\u6876");
   else if (r.bucket === "avoid") aM(-1, "\u56de\u907f\u6876");
+  if (mf20 !== null) {
+    if (mf20 >= 2) aM(1.5, "近 20 日主力净流入 +" + mf20 + " 亿");
+    else if (mf20 > 0) aM(0.5, "近 20 日主力净流入 +" + mf20 + " 亿");
+    else if (mf20 <= -2) aM(-1.5, "近 20 日主力净流出 " + mf20 + " 亿");
+  }
+  var cl = num(r.close);
+  if (tp !== null && cl !== null && cl > 0) {
+    var up = Math.round((tp / cl - 1) * 1000) / 10;
+    if (up >= 15) aM(1.5, "机构一致目标价 " + tp + " 元，空间 +" + up + "%");
+    else if (up >= 5) aM(0.5, "机构一致目标价 " + tp + " 元（空间 +" + up + "%）");
+    else if (up < 0) aM(-1, "机构一致目标价 " + tp + " 元低于现价");
+  }
+  var revY = num(r.revYoY), npY = num(r.npYoY), dkY = num(r.dkYoY), dkGap = num(r.dkGap);
+  if (npY !== null) {
+    if (npY >= 20) aM(1, "最新归母净利同比 +" + npY + "%（报告期 " + (r.rpt || "—") + "）");
+    else if (npY >= 0) aM(0.5, "最新归母净利同比 +" + npY + "%");
+    else if (npY <= -20) aM(-1.5, "最新归母净利同比 " + npY + "%：业绩承压");
+    else aM(-0.5, "最新归母净利同比 " + npY + "%");
+  }
+  if (revY !== null && revY >= 20) aM(0.5, "营收同比 +" + revY + "%：扩张期");
+  if (dkGap !== null && dkGap >= 20) aM(0, "提示：归母同比 " + npY + "% 与扣非同比 " + dkY + "% 背离 " + dkGap + " 个百分点，疑非经常性损益，以扣非口径定性");
+  var maS = num(r.ma20s), dd60 = num(r.dd60), v20 = num(r.vol20);
+  if (maS !== null) {
+    if (maS >= 1) aM(0.5, "MA20 斜率 +" + maS + "%（5 日）：中期趋势向上");
+    else if (maS <= -2) aM(-0.5, "MA20 斜率 " + maS + "%：中期趋势走弱");
+  }
+  if (dd60 !== null) {
+    if (dd60 > -5) aM(-0.5, "距 60 日高点仅 " + dd60 + "%：贴近新高，追高需谨慎");
+    else if (dd60 <= -30) aM(0.5, "距 60 日高点 " + dd60 + "%：深度回撤，关注超跌修复");
+  }
+  if (v20 !== null && v20 >= 4.5) aM(-0.5, "20 日波动率 " + v20 + "%：情绪票，回撤风险大");
   if (num(r.bad)) aM(-1, "\u8fd1\u534a\u5e74\u6709\u51cf\u6301/\u76d1\u7ba1\u516c\u544a");
   if (rk.length >= 2) aM(-1, "\u57fa\u672c\u9762\u98ce\u9669\u6807\u7b7e " + rk.length + " \u4e2a\uff1a" + rk.join("\u3001"));
   else if (rk.length === 1) aM(-0.5, "\u98ce\u9669\u6807\u7b7e\uff1a" + rk[0]);
@@ -440,8 +529,39 @@ function analyze(r, en) {
     else if (t === "\u4f30\u503c\u8f83\u9ad8") aL(-1, "\u4f30\u503c\uff1a\u8f83\u9ad8");
   });
   if (num(r.bad)) aL(-1.5, "\u80a1\u4e1c\u52a8\u5411\uff1a\u8fd1\u534a\u5e74\u6709\u51cf\u6301/\u76d1\u7ba1\u516c\u544a");
+  var gwv = num(r.gw), gwp = num(r.gwp), orgs = num(r.orgs), br = num(r.br);
+  if (gwp !== null) {
+    if (gwp >= 30) aL(-2, "商誉 " + (gwv === null ? "—" : gwv) + " 亿，占净资产 " + gwp + "%：减值风险高");
+    else if (gwp >= 15) aL(-1, "商誉 " + (gwv === null ? "—" : gwv) + " 亿，占净资产 " + gwp + "%：需留意减值");
+  }
+  var debt = num(r.debt), peD = num(r.pe), pbD = num(r.pb), roe = num(r.roe);
+  if (debt !== null) {
+    if (debt >= 70) aL(-1.5, "资产负债率 " + debt + "%：杠杆偏高");
+    else if (debt >= 60) aL(-0.5, "资产负债率 " + debt + "%：中等偏高");
+  }
+  if (peD !== null) {
+    if (peD < 0) aL(-1.5, "PE(TTM) 为负：亏损状态，长期逻辑依赖困境反转");
+    else if (peD > 80) aL(-1, "PE(TTM) " + peD + " 倍：估值透支明显");
+    else if (peD <= 25) aL(0.5, "PE(TTM) " + peD + " 倍：估值不贵");
+  }
+  if (roe !== null) {
+    if (roe >= 10) aL(0.5, "加权 ROE " + roe + "%：盈利质量好");
+    else if (roe < 0) aL(-1, "加权 ROE " + roe + "%：净资产收益为负");
+  }
+  var liftD = r.liftD, liftP = num(r.liftP);
+  if (liftD) {
+    var daysTo = Math.round((Date.parse(liftD) - Date.now()) / 86400000);
+    if (daysTo <= 90 && liftP !== null && liftP >= 2) aL(-1.5, liftD + " 解禁占总股本 " + liftP + "%（" + daysTo + " 天后）：抛压窗口");
+    else if (daysTo <= 90 && liftP !== null) aL(-0.5, liftD + " 有解禁（占总股本 " + liftP + "%，" + daysTo + " 天后）");
+    else aL(0, "提示：" + liftD + " 有解禁（占总股本 " + (liftP === null ? "—" : liftP) + "%，较远）");
+  }
+  if (orgs !== null && orgs >= 3) aL(0.5, "近 90 天 " + orgs + " 家机构研报覆盖" + (br !== null ? "（买入+增持占 " + Math.round(br * 100) + "%）" : ""));
+  if (tp !== null && cl !== null && cl > 0) {
+    var up2 = Math.round((tp / cl - 1) * 1000) / 10;
+    if (up2 >= 20) aL(1, "机构一致目标价隐含空间 +" + up2 + "%");
+  }
   if (en && en.event) LR.push({ d: 0, t: "\uff08\u53c2\u8003\uff09" + en.event });
-  LR.push({ d: 0, t: "\u957f\u671f\u4ec5\u57fa\u4e8e\u770b\u677f\u53ef\u5f97\u7684\u8d8b\u52bf/\u957f\u5747\u7ebf/\u4f30\u503c/\u98ce\u9669\u6807\u7b7e\uff0c\u672a\u505a\u6df1\u5ea6\u57fa\u672c\u9762\u5efa\u6a21\uff0c\u7f6e\u4fe1\u5ea6\u4f4e\u4e8e\u77ed\u4e2d\u671f" });
+  LR.push({ d: 0, t: "长期维度综合长均线 / 估值（PE·PB·ROE）/ 负债率 / 商誉 / 解禁 / 机构覆盖度推导，产业逻辑仍需人工跟踪财报与行业数据" });
 
   function vs(x) { return x >= 3.5 ? "\u53ef\u64cd\u4f5c" : x >= 1.5 ? "\u8c28\u614e\u53ef\u64cd\u4f5c" : x >= 0 ? "\u89c2\u5bdf" : "\u4e0d\u5efa\u8bae"; }
   function vm2(x) { return x >= 3 ? "\u53ef\u64cd\u4f5c" : x >= 1 ? "\u8c28\u614e\u53ef\u64cd\u4f5c" : x >= 0 ? "\u89c2\u5bdf" : "\u4e0d\u5efa\u8bae"; }
@@ -463,161 +583,268 @@ function analyze(r, en) {
   };
 }
 function vCls(v) { return v === "\u53ef\u64cd\u4f5c" ? "v-ok" : (v === "\u8c28\u614e\u53ef\u64cd\u4f5c" ? "v-mid" : (v === "\u4e0d\u5efa\u8bae" ? "v-no" : "v-gray")); }
-function reasonsHtml(list) {
-  return "<ul>" + list.map(function (x) {
-    if (x.d === 0) return '<li><span class="note">' + esc(x.t) + "</span></li>";
-    var sign = x.d > 0 ? "+" : "";
-    return "<li>" + esc(x.t) + ' <b class="' + (x.d > 0 ? "up" : "down") + '">' + sign + x.d + "</b></li>";
-  }).join("") + "</ul>";
-}
-function kv(k, v) { return "<div><span class='note'>" + esc(k) + "</span><b>" + esc(v) + "</b></div>"; }
-function findRow(day, code) { for (var i = 0; i < STATE.rows.length; i++) { var r = STATE.rows[i]; if (r.day === day && r.code === code) return r; } return null; }
 
-/* ---- 表格内周期标签：可操作=实心，谨慎可操作=虚线 ---- */
-function horizonTags(r, en) {
-  var A = analyze(r, en), out = [];
-  function one(label, key, cls) {
-    var h = A[key];
-    if (h.verdict !== "可操作" && h.verdict !== "谨慎可操作") return;
-    var soft = h.verdict === "可操作" ? "" : " soft";
-    var tip = label + "：" + h.verdict + "（评分 " + h.score + "）— 点击查看完整依据";
-    out.push('<span class="htag ' + cls + soft + '" data-act="an" data-day="' + esc(r.day) + '" data-code="' + esc(r.code) + '" title="' + esc(tip) + '">' + label + '</span>');
+/* ---- 交叉验证裁决（对齐《深度研报分析流程》第 5 步：技术面 × 基本面 × 资金面三维裁决） ---- */
+function crossCheck(r) {
+  var out = [];
+  var cl = num(r.close), tp = num(r.tp), npY = num(r.npYoY), dkY = num(r.dkYoY);
+  var pe = num(r.pe), gwp = num(r.gwp), dd60 = num(r.dd60);
+  var upTrend = (r.trend || "").indexOf("上升") === 0;
+  var strong = upTrend || (arr(r.above).indexOf("20") >= 0);
+  // ① 目标价验证 / 无空间降级
+  if (tp !== null && cl !== null && cl > 0) {
+    var up = Math.round((tp / cl - 1) * 1000) / 10;
+    if (up < 0) out.push({ lv: "warn", tag: "目标价验证", text: "现价 " + cl + " 已高于机构一致目标价 " + tp + " 元（隐含 " + up + "%）：不追高，等回踩低吸位或 20 日线再布局" });
+    else if (up < 5) out.push({ lv: "note", tag: "目标价验证", text: "一致目标价 " + tp + " 元距现价仅 +" + up + "%：上行空间有限，持有为主、不加仓" });
   }
-  one("短期", "short", "s");
-  one("中期", "mid", "m");
-  one("长期", "long", "l");
-  return out.join("");
+  // ② 逻辑冲突降级：技术面强但基本面弱 → 事件博弈
+  if (strong && ((npY !== null && npY < 0) || (pe !== null && pe > 100))) {
+    out.push({ lv: "warn", tag: "逻辑冲突降级", text: "技术面偏强但基本面弱（归母同比 " + (npY === null ? "—" : npY + "%") + "、PE " + (pe === null ? "—" : pe) + "）：归入事件博弈，仓位降档、严格止损" });
+  }
+  // ③ 非经常性损益校验
+  var dkGap = num(r.dkGap);
+  if (dkGap !== null && dkGap >= 20 && npY !== null && dkY !== null) {
+    out.push({ lv: "warn", tag: "非经常损益校验", text: "表观归母同比 " + npY + "% vs 扣非同比 " + dkY + "%（差 " + dkGap + " 个百分点）：以扣非口径重新定性，勿按表观增速给估值" });
+  }
+  // ④ 风险一票否决
+  if (gwp !== null && gwp >= 30) out.push({ lv: "no", tag: "风险一票否决", text: "商誉占净资产 " + gwp + "%：减值雷区，长期维度直接规避" });
+  if (pe !== null && pe < 0 && strong) out.push({ lv: "no", tag: "风险一票否决", text: "亏损状态（PE 为负）且仅靠价格强势：纯题材博弈，规避或仅事件仓" });
+  else if (pe !== null && pe > 150) out.push({ lv: "no", tag: "风险一票否决", text: "PE(TTM) " + pe + " 倍且无业绩支撑：估值泡沫区，规避" });
+  // ⑤ 解禁验证日历
+  var liftD = r.liftD, liftP = num(r.liftP);
+  if (liftD) {
+    var daysTo = Math.round((Date.parse(liftD) - Date.now()) / 86400000);
+    if (daysTo >= 0 && daysTo <= 90 && (liftP === null || liftP >= 2)) out.push({ lv: "warn", tag: "解禁日历", text: liftD + "（" + daysTo + " 天后）解禁占总股本 " + (liftP === null ? "—" : liftP) + "%：把该日作为证伪/减仓窗口" });
+  }
+  // ⑥ 位置提示
+  if (dd60 !== null && dd60 > -3 && (r.bucket !== "avoid")) out.push({ lv: "note", tag: "位置提示", text: "距 60 日高点仅 " + dd60 + "%：贴近新高，追高胜率下降，等回踩或突破放量确认" });
+  if (!out.length) out.push({ lv: "ok", tag: "交叉验证", text: "技术面 × 基本面 × 资金面三维未见冲突，按三周期卡片结论执行即可" });
+  return out;
 }
-function badgeCls(v) { return v === "可操作" ? "b-green" : (v === "谨慎可操作" ? "b-amber" : (v === "不建议" ? "b-red" : "b-blue")); }
-function cardCls(v) { return v === "可操作" ? "good" : (v === "谨慎可操作" ? "warn" : (v === "不建议" ? "bad" : "blue")); }
-function tagLabel(hz, kind) {
-  var pos = hz.reasons.filter(function (x) { return x.d > 0; }).sort(function (a, b) { return b.d - a.d; });
-  var top = pos.length ? pos[0].t : "";
-  if (hz.verdict === "不建议") return kind.replace(/（.*/, "") + "回避";
-  if (hz.verdict === "观察") return "观察";
-  if (hz.verdict === "谨慎可操作") return "回踩再进";
-  if (/上升趋势/.test(top)) return "趋势上行";
-  if (/5\/10\/20/.test(top)) return "多头排列";
-  if (/盈亏比/.test(top)) return "风险收益优";
-  if (/潜力模型/.test(top)) return "潜力高分";
-  if (/新闻催化/.test(top)) return "催化反复";
-  if (/PE|PB|估值/.test(top)) return "估值占优";
-  if (/可执行桶/.test(top)) return "综合达标";
-  return "可操作";
+/* ---- 深度研报卡（对齐参考报告六模块）----
+ * 最新业绩 / 核心逻辑 / 技术面与资金面 / 估值与机构预期 / 风险 / 操作建议
+ * 全部由 deep-factors.js 全网采集的因子归纳生成，不引用财联社看板的调研/技术结论原文；
+ * 弹窗中仅保留「已实现表现（T+1~T+5）」与「相关新闻」两栏来自看板。 */
+function signYi(v) { var x = num(v); if (x === null) return "—"; return (x > 0 ? "+" : "") + x + " 亿"; }
+function spaceTxt(r) { var tp = num(r.tp), cl = num(r.close); if (tp === null || cl === null || cl <= 0) return null; var u = Math.round((tp / cl - 1) * 1000) / 10; return (u > 0 ? "+" : "") + u + "%"; }
+function secHtml(color, title, inner) {
+  return '<div class="mbox"><h4 style="border-left:4px solid ' + color + ';padding-left:8px">' + title + "</h4>" + inner + "</div>";
 }
-function narrative(hz) {
-  var pos = hz.reasons.filter(function (x) { return x.d > 0; }).sort(function (a, b) { return b.d - a.d; });
-  var neg = hz.reasons.filter(function (x) { return x.d < 0; }).sort(function (a, b) { return a.d - b.d; });
-  var info = hz.reasons.filter(function (x) { return x.d === 0; });
-  var s = "<b>支持依据：</b>" + (pos.length ? pos.slice(0, 5).map(function (x) { return esc(x.t) + '<span class="up"> +' + x.d + "</span>"; }).join("；") : "无");
-  s += "<br><b>反向依据：</b>" + (neg.length ? neg.slice(0, 5).map(function (x) { return esc(x.t) + '<span class="down"> ' + x.d + "</span>"; }).join("；") : "无");
-  if (info.length) s += '<br><span class="note">' + esc(info.map(function (x) { return x.t; }).join("；")) + "</span>";
-  return s;
+function secList(items) {
+  return '<ul style="margin:4px 0 0 18px;padding:0">' + items.map(function (t) { return '<li style="margin:5px 0">' + t + "</li>"; }).join("") + "</ul>";
 }
-function cardFor(kind, hz, chips, opt) {
-  return '<div class="card ' + cardCls(hz.verdict) + '"><h3><span class="badge ' + badgeCls(hz.verdict) + '">' + esc(tagLabel(hz, kind)) + "</span>"
-    + esc(kind) + ' <span class="note">' + esc(hz.verdict) + " · 评分 " + hz.score + "</span></h3>"
-    + "<p>" + narrative(hz) + "</p>"
-    + '<div class="kv">' + chips.map(function (c) { return "<span>" + esc(c) + "</span>"; }).join("") + "</div>"
-    + (opt ? '<div class="opt">' + esc(opt) + "</div>" : "") + "</div>";
+
+/* 头部指标条（对齐参考报告：现价/PE/总市值/5日/距60日高/RSI/机构目标价） */
+function deepChips(r) {
+  var c = ["现价 <b>" + f2(r.close) + "</b>（" + signPct(r.chg) + "）"];
+  if (num(r.pe) !== null) c.push("PE(TTM) <b>" + r.pe + "</b>" + (r.pe < 0 ? "（亏损）" : ""));
+  if (num(r.mcap) !== null) c.push("总市值 <b>" + r.mcap + " 亿</b>");
+  if (num(r.chg5) !== null) c.push("5日 " + signPct(r.chg5));
+  if (num(r.dd60) !== null) c.push("距60日高 " + signPct(r.dd60));
+  if (num(r.rsi) !== null) c.push("RSI " + r.rsi);
+  var tpT = (num(r.tpLow) !== null && num(r.tpHigh) !== null && r.tpLow !== r.tpHigh) ? r.tpLow + "~" + r.tpHigh : (num(r.tp) !== null ? String(r.tp) : null);
+  if (tpT) c.push("机构目标价 <b>" + tpT + " 元</b>" + (spaceTxt(r) ? "（空间 " + spaceTxt(r) + "）" : ""));
+  return '<div class="kv" style="margin-top:6px">' + c.map(function (x) { return "<span>" + x + "</span>"; }).join("") + "</div>";
 }
-function chipsShort(r) {
-  var c = ["现价 " + f2(r.close) + "（" + signPct(r.chg) + "）", "盈亏比 " + (num(r.rr) === null ? "不可用" : r.rr),
-    "低吸 " + f2(r.entry) + " / 止损 " + f2(r.stop), "量较前日 " + (r.vol === null || r.vol === undefined ? "—" : r.vol + "%")];
-  if (num(r.sealed)) c.push("收盘封板");
-  return c;
+
+/* ① 最新业绩（财报因子） */
+function perfHtml(r) {
+  if (r.rpt === null && num(r.npYoY) === null && num(r.rev) === null) {
+    return secHtml("#2563eb", "最新业绩", '<span class="note">暂未取到财报数据（次新股或数据源缺失）。</span>');
+  }
+  var parts = [];
+  if (num(r.rev) !== null) parts.push("营收 <b>" + r.rev + " 亿</b>（" + signPct(r.revYoY) + "）");
+  if (num(r.np) !== null) parts.push("归母净利 <b>" + r.np + " 亿</b>（" + signPct(r.npYoY) + "）");
+  if (num(r.dk) !== null) parts.push("<b>扣非净利 " + r.dk + " 亿（" + signPct(r.dkYoY) + "）</b>");
+  if (num(r.gm) !== null) parts.push("毛利率 " + r.gm + "%");
+  if (num(r.roe) !== null) parts.push("加权 ROE " + r.roe + "%");
+  var warn = "";
+  if (num(r.dkGap) !== null && num(r.dkGap) >= 20) {
+    warn = '<div class="note" style="color:#b45309;margin-top:4px">⚠ 归母同比（' + signPct(r.npYoY) + "）与扣非同比（" + signPct(r.dkYoY) + "）背离 " + r.dkGap + " 个百分点：疑非经常性损益贡献，以扣非口径定性。</div>";
+  }
+  return secHtml("#2563eb", "最新业绩（" + esc(r.rptName || r.rpt || "—") + "）", "<p style='margin:4px 0 0'>" + parts.join("；") + "。</p>" + warn);
 }
-function chipsMid(r) {
-  return ["趋势 " + (r.trend || "—"), "站上 " + (r.above || "—"), "受压 " + (r.below || "—"),
-    "潜力 " + (num(r.pot) === null ? "—" : r.pot + "/100"), "新闻 " + (num(r.news) === null ? "—" : r.news + " 条")];
+
+/* ② 核心逻辑（近 90 天机构研报观点，来自 deep-factors 全网采集） */
+function logicHtml(r, deep) {
+  var rpts = (deep && deep.rpts) || [];
+  if (!rpts.length) {
+    return secHtml("#7c3aed", "核心逻辑（研报观点）", '<span class="note">近 90 天无机构研报覆盖，暂无观点归纳；驱动因素请结合下方「相关新闻」跟踪。</span>');
+  }
+  var items = rpts.map(function (p) {
+    return "<b>[" + esc(p.r || "研报") + "]</b> " + esc(p.t)
+      + ' <span class="note">（' + esc(p.o) + " · " + esc(p.d)
+      + (p.tp ? " · 目标价 " + p.tp + " 元" : "") + (p.eps ? " · 26E EPS " + p.eps : "") + "）</span>";
+  });
+  return secHtml("#7c3aed", "核心逻辑（近 90 天机构研报观点归纳）", secList(items));
 }
-function chipsLong(r, en) {
-  var ab = arr(r.above);
-  var c = ["长均线 " + ((has(ab, "120") || has(ab, "250")) ? "部分站上" : "均未站上")];
-  if (en && en.valuation) {
-    var vm = valMetrics(en.valuation);
-    if (vm.noPe) c.push("PE 不适用/失真"); else if (vm.pe !== null) c.push("PE(TTM) " + vm.pe + " 倍");
-    if (vm.pb !== null) c.push("PB " + vm.pb + " 倍");
-  } else c.push("估值原文未取到");
-  c.push("风险标签 " + String(r.risk || "").split("|").filter(Boolean).length + " 个");
-  c.push(num(r.bad) ? "有减持/监管" : "无减持/监管");
-  return c;
+
+/* ③ 技术面与资金面（K 线衍生因子 + 主力资金） */
+function techFlowHtml(r) {
+  var ps = [];
+  if (num(r.chg5) !== null) ps.push("5 日 " + signPct(r.chg5) + (num(r.chg20) !== null ? "、20 日 " + signPct(r.chg20) : ""));
+  if (num(r.ma20v) !== null) {
+    var dev = (num(r.close) !== null && r.ma20v > 0) ? Math.round((r.close / r.ma20v - 1) * 1000) / 10 : null;
+    ps.push((num(r.close) >= r.ma20v ? "站上 MA20" : "跌破 MA20") + "（" + f2(r.ma20v) + (dev !== null ? "，偏离 " + signPct(dev) : "") + "）");
+  }
+  if (num(r.dd60) !== null) ps.push("距 60 日高点 " + signPct(r.dd60));
+  if (num(r.vr) !== null) ps.push("量比 " + r.vr);
+  if (num(r.vrq) !== null) ps.push("5日/20日量能比 " + r.vrq);
+  if (num(r.rsi) !== null) ps.push("RSI14 " + r.rsi + (r.rsi >= 78 ? "（偏热）" : r.rsi <= 28 ? "（超卖）" : ""));
+  if (num(r.kdjJ) !== null) ps.push("KDJ_J " + r.kdjJ + (r.kdjJ > 90 ? "（短线过热）" : r.kdjJ < 10 ? "（短线超卖）" : ""));
+  var flow = [];
+  if (num(r.mft) !== null) flow.push("当日 " + signYi(r.mft));
+  if (num(r.mf5) !== null) flow.push("近 5 日 " + signYi(r.mf5));
+  if (num(r.mf10) !== null) flow.push("近 10 日 " + signYi(r.mf10));
+  if (num(r.mf20) !== null) flow.push("近 20 日 " + signYi(r.mf20));
+  if (flow.length) ps.push("主力净流入（超大单+大单）： " + flow.join("、"));
+  if (num(r.vol20) !== null) ps.push("20 日波动率 " + r.vol20 + "%" + (r.vol20 >= 4.5 ? "（情绪票，回撤风险大）" : ""));
+  return secHtml("#0891b2", "技术面与资金面", "<p style='margin:4px 0 0'>" + ps.join("；") + "。</p>");
 }
-function analysisReport(r, en) {
-  var A = analyze(r, en);
-  return cardFor("短期（1~5 交易日）", A.short, chipsShort(r), A.short.opt)
-    + cardFor("中期（数周 ~ 3 个月）", A.mid, chipsMid(r), A.mid.opt)
-    + cardFor("长期（3 个月以上）", A.long, chipsLong(r, en), A.long.opt);
+
+/* ④ 估值与机构预期（估值快照 + 研报盈利预测） */
+function valExpectHtml(r) {
+  var ps = [];
+  if (num(r.pe) !== null) ps.push("PE(TTM) <b>" + r.pe + " 倍</b>" + (r.pe < 0 ? "（亏损，PE 失真）" : ""));
+  else if (num(r.eps26) !== null && num(r.close) !== null && r.close > 0) {
+    ps.push("PE(TTM) 失真（亏损），按 26 年预测 EPS 对应前瞻 PE " + Math.round(r.close / r.eps26 * 10) / 10 + " 倍");
+  }
+  if (num(r.pb) !== null) ps.push("PB " + r.pb + " 倍");
+  if (num(r.ratedCnt) !== null) ps.push("评级分布：买入 " + (num(r.buyCnt) || 0) + " / 增持 " + (num(r.addCnt) || 0) + " / 共 " + r.ratedCnt + " 篇");
+  if (num(r.tp) !== null) {
+    var rng = (num(r.tpLow) !== null && num(r.tpHigh) !== null && r.tpLow !== r.tpHigh) ? "（区间 " + r.tpLow + "~" + r.tpHigh + "）" : "";
+    ps.push("机构一致目标价 <b>" + r.tp + " 元</b>" + rng + (spaceTxt(r) ? "，隐含空间 " + spaceTxt(r) : ""));
+    if (num(r.close) !== null && r.close > r.tp) ps.push('<span style="color:#b91c1c"><b>目标价验证：</b>现价已超一致目标价，不追高，等回踩再布局</span>');
+  }
+  if (num(r.eps26) !== null) {
+    var peF = (num(r.close) !== null && r.close > 0) ? Math.round(r.close / r.eps26 * 10) / 10 : null;
+    ps.push("机构预测 26 年 EPS " + r.eps26 + " 元" + (peF !== null ? "（对应 PE " + peF + " 倍）" : "")
+      + (num(r.eps27) !== null ? "；27 年 EPS " + r.eps27 + " 元" : "") + "（来源：研报盈利预测均值）");
+  }
+  if (!ps.length) return secHtml("#ea580c", "估值与机构预期", '<span class="note">暂无估值与研报预期数据。</span>');
+  return secHtml("#ea580c", "估值与机构预期", secList(ps));
 }
-function evidenceHtml(r, en) {
-  var ev = [];
-  function add(tag, text, src) { ev.push({ tag: tag, text: text, src: src }); }
-  add("行情量价", "现价 " + f2(r.close) + "，当日 " + signPct(r.chg) + "，换手 "
-    + (r.turn === null || r.turn === undefined ? "—" : r.turn + "%") + "，量较前日 "
-    + (r.vol === null || r.vol === undefined ? "—" : r.vol + "%") + (num(r.sealed) ? "，收盘封板" : ""),
-    "看板快照 news.json（本轮抓取）");
-  add("均线站位", "站上 " + (r.above || "—") + "；受压 " + (r.below || "—"), "看板「技术面结论」位置句解析");
-  add("关键价位", "支撑 " + f2(r.support) + " / 阻力 " + f2(r.resist) + "；参考低吸 " + f2(r.entry)
-    + " / 止损 " + f2(r.stop) + "；盈亏比 " + (num(r.rr) === null ? "不可用" : r.rr),
-    "看板「关键位」+ 调研「短线博弈」原句");
-  add("潜力模型", (num(r.pot) === null ? "—" : r.pot + "/100"), "看板「未来三个月潜力」模型分");
-  if (r.theme) add("题材归属", r.theme, "看板「题材」原句");
-  if (en && en.valuation) add("估值与财务", en.valuation, "看板「估值」原文");
-  if (en && en.event) add("业绩事件", en.event, "看板「目前大事」");
-  if (en && en.holders) add("股东动向", en.holders, "看板「股东动向」");
-  if (r.risk) add("风险标签", String(r.risk).split("|").join("、"), "看板「未来三个月潜力」风险句");
-  if (en && en.news && en.news.length) add("消息面", en.news.length + " 条新闻提及（最近 " + esc((en.news[0].t || "").slice(5, 16)) + "）", "看板新闻清单");
-  var li = ev.map(function (e) {
-    return '<li><span class="evt">' + esc(e.tag) + "</span>" + esc(e.text) + '<div class="evs">来源：' + esc(e.src) + "</div></li>";
-  }).join("");
-  var raw = "";
-  if (en && en.tecText) raw += '<div class="evs" style="margin-top:8px">技术面结论原文：' + esc(en.tecText) + "</div>";
-  if (en && en.resText) raw += '<div class="evs" style="margin-top:5px">调研结论原文：' + esc(en.resText) + "</div>";
-  return '<div class="mbox"><h4>资料证据（逐条标注来源，可核对）</h4><ol class="evi">' + li + "</ol>" + raw + "</div>";
+
+/* ⑤ 风险（因子规则化生成，对齐流程「风险提示：每只 2~4 条具体风险」） */
+function riskItems(r) {
+  var out = [];
+  var gwp = num(r.gwp), gwv = num(r.gw);
+  if (gwp !== null && gwp >= 15) out.push((gwp >= 30 ? "<b>商誉减值雷区：</b>" : "<b>商誉：</b>") + f2(gwv) + " 亿，占归母净资产 " + gwp + "%" + (gwp >= 30 ? "，长期维度一票否决" : "，留意年报减值测试"));
+  var debt = num(r.debt);
+  if (debt !== null && debt >= 60) out.push("<b>杠杆：</b>资产负债率 " + debt + "%" + (debt >= 70 ? "，偏高" : "，中等偏高"));
+  var liftD = r.liftD, liftP = num(r.liftP);
+  if (liftD) {
+    var daysTo = Math.round((Date.parse(liftD) - Date.now()) / 86400000);
+    if (daysTo >= 0 && daysTo <= 90) out.push("<b>解禁窗口：</b>" + liftD + "（" + daysTo + " 天后）解禁占总股本 " + (liftP === null ? "—" : liftP) + "%" + (liftP !== null && liftP >= 2 ? "，抛压明显" : ""));
+  }
+  var pe = num(r.pe);
+  if (pe !== null && pe < 0) out.push("<b>盈利：</b>TTM 亏损，PE 失真，估值锚失效");
+  else if (pe !== null && pe > 80) out.push("<b>估值透支：</b>PE(TTM) " + pe + " 倍" + (pe > 150 ? "，泡沫区" : ""));
+  if (num(r.dkGap) !== null && num(r.dkGap) >= 20) out.push("<b>非经常性损益：</b>归母与扣非同比背离 " + r.dkGap + " 个百分点，表观增速有水分");
+  if (num(r.vol20) !== null && r.vol20 >= 4.5) out.push("<b>波动：</b>20 日波动率 " + r.vol20 + "%，情绪票回撤风险大");
+  if (num(r.mf20) !== null && r.mf20 <= -2) out.push("<b>资金：</b>近 20 日主力净流出 " + r.mf20 + " 亿，趋势资金在撤离");
+  if (num(r.orgs) === null || r.orgs === 0) out.push("<b>覆盖缺失：</b>近 90 天无机构研报，信息不对称，证伪窗口靠财报日");
+  return out;
 }
+function riskHtml(r) {
+  var items = riskItems(r);
+  if (!items.length) return secHtml("#dc2626", "风险提示", '<span style="color:#15803d">因子层未见明显风险项（商誉 / 负债 / 解禁 / 估值 / 资金 / 波动均在阈值内）。</span>');
+  return secHtml("#dc2626", "风险提示", secList(items));
+}
+
+/* ⑥ 操作建议（买点 + 止损 + 目标 + 仓位三要素，纯技术因子推导） */
+function opHtml(r, A) {
+  var cl = num(r.close), ma20 = num(r.ma20v), ma60 = num(r.ma60v), tp = num(r.tp), tpH = num(r.tpHigh);
+  var cr = crossCheck(r);
+  var worst = "ok";
+  cr.forEach(function (x) { if (x.lv === "no") worst = "no"; else if (x.lv === "warn" && worst !== "no") worst = "warn"; });
+
+  var buys = [], stops = [], goals = [];
+  if (ma20 !== null && cl !== null) {
+    if (cl >= ma20) {
+      buys.push("现价 " + f2(cl) + " 持有为主，回踩 MA20（" + f2(ma20) + "）附近分批加仓");
+      stops.push("有效跌破 MA20 下 3%（约 " + f2(ma20 * 0.97) + "）离场");
+    } else {
+      buys.push("现价在 MA20（" + f2(ma20) + "）下方，反弹站回 MA20 前轻仓试探，站回再补");
+      stops.push("跌破近期低点（60 日低点约 " + f2(cl / (1 + (num(r.up60) || 0) / 100)) + "）止损");
+    }
+  }
+  if (num(r.rsi) !== null && r.rsi <= 28) buys.push("RSI14 " + r.rsi + " 超卖，反抽窗口可分批");
+  if (num(r.sealed)) buys.push("收盘封板：次日一字板放弃，竞价涨幅 <5% 再考虑");
+  if (tp !== null) goals.push("第一目标：一致目标价 " + tp + " 元" + (spaceTxt(r) ? "（" + spaceTxt(r) + "）" : ""));
+  if (tpH !== null && tpH !== tp) goals.push("弹性目标：" + tpH + " 元");
+  if (tp === null && num(r.dd60) !== null && cl !== null) goals.push("无机构目标价，参考回到 60 日高点约 " + f2(cl / (1 + r.dd60 / 100)) + " 元");
+
+  var pos = { executable: "篮子「可执行」", watch: "篮子「观察」", avoid: "篮子「回避」", review: "复盘池", pool: "「纳入」" }[r.bucket] || r.bucket;
+  var posAdvice;
+  if (worst === "no") posAdvice = "触发一票否决，仅观察 / 事件仓（≤0.5 成），不建底仓";
+  else if (worst === "warn") posAdvice = "存在降级因素，仓位 ≤1 成、严格止损（" + pos + "）";
+  else posAdvice = "三维未见冲突，短中线可分批（" + pos + "，2~3 成以内）";
+
+  var periods = "短期 " + A.short.verdict + "（" + A.short.score + "）· 中期 " + A.mid.verdict + "（" + A.mid.score
+    + "）· 长期 " + A.long.verdict + "（" + A.long.score + "）";
+  var warn = cr.filter(function (x) { return x.lv !== "ok"; }).map(function (x) {
+    return "<b>" + esc(x.tag) + "：</b>" + esc(x.text);
+  });
+
+  var inner = "<p style='margin:4px 0 0'><b>三周期结论：</b>" + esc(periods) + "</p>"
+    + "<p style='margin:4px 0 0'><b>买点：</b>" + (buys.length ? buys.join("；") : "关键均线数据缺失，暂不给买点") + "</p>"
+    + "<p style='margin:4px 0 0'><b>止损：</b>" + (stops.length ? stops.join("；") : "以 60 日低点为参照") + "</p>"
+    + (goals.length ? "<p style='margin:4px 0 0'><b>目标：</b>" + goals.join("；") + "</p>" : "")
+    + "<p style='margin:4px 0 0'><b>仓位：</b>" + posAdvice + "</p>"
+    + (warn.length ? '<div class="note" style="color:#b45309;margin-top:5px">裁决：' + warn.join("；") + "</div>" : "");
+  return secHtml("#16a34a", "操作建议", inner);
+}
+
 function showModal(r, en, loadingNews) {
   var A = analyze(r, en);
+  var deep = (typeof DEEP_MAP !== "undefined" && DEEP_MAP) ? DEEP_MAP[r.code] : null;
   var tArr = [["T+1", r.t1], ["T+2", r.t2], ["T+3", r.t3], ["T+4", r.t4], ["T+5", r.t5]];
   var newsHtml = "";
-  if (loadingNews) newsHtml = '<div class="mbox"><h4>看板原文</h4><pre>正在加载当前快照原文…</pre></div>';
-  else if (NEWS_ERR) newsHtml = '<div class="mbox"><h4>看板原文</h4><pre>原文加载失败或该股已离开当前快照窗口，结论仅基于存档字段。</pre></div>';
-  else if (!en) newsHtml = '<div class="mbox"><h4>看板原文</h4><pre>该股不在当前快照窗口内（已离开 7 日新闻集），无法附上看板技术面/调研原文。</pre></div>';
-  else if (en.news && en.news.length) {
-    newsHtml = '<div class="mbox"><h4>相关新闻（' + en.news.length + ' 条，最近 5 条）</h4><ul style="margin:4px 0 0 16px;padding:0">'
+  if (loadingNews) newsHtml = '<div class="mbox"><h4>相关新闻</h4><pre>正在加载当前快照新闻…</pre></div>';
+  else if (en && en.news && en.news.length) {
+    newsHtml = '<div class="mbox"><h4>相关新闻（' + en.news.length + " 条，最近 5 条）</h4><ul style=\"margin:4px 0 0 16px;padding:0\">"
       + en.news.slice(0, 5).map(function (n) {
         return '<li><span class="note">' + esc((n.t || "").slice(5, 16)) + "</span> <b>[" + esc(n.cat) + ']</b> <a target="_blank" rel="noopener" href="' + esc(n.url) + '">' + esc((n.title || "").slice(0, 70)) + "</a></li>";
       }).join("") + "</ul></div>";
+  } else {
+    newsHtml = '<div class="mbox"><h4>相关新闻</h4><pre>该股不在当前 7 日新闻窗口内。</pre></div>';
   }
   var chips = ["分桶 " + (BK_LABEL[r.bucket] || r.bucket), "档位 " + (r.tier || "—"), "可执行分 " + r.score,
-    "趋势 " + (r.trend || "—"), "盈亏比 " + (num(r.rr) === null ? "不可用" : r.rr), "存档日 " + r.day];
+    "发布 " + (r.ptime ? String(r.ptime).slice(5, 16) : "—"), "存档日 " + r.day];
   var html = '<div class="mask" data-close="1"><div class="modal">'
     + '<button class="x" data-close="1">✕</button>'
-    + "<h2>" + esc(r.name) + ' <span class="note">' + esc(r.code) + "</span></h2>"
-    + '<div class="kv" style="margin-top:6px">' + chips.map(function (c) { return "<span>" + esc(c) + "</span>"; }).join("") + "</div>"
-    + analysisReport(r, en)
-    + evidenceHtml(r, en)
-    + '<div class="mbox"><h4>关键价位与状态</h4><div class="kv2">'
-    + kv("现价 / 当日", f2(r.close) + " / " + signPct(r.chg)) + kv("参考低吸", f2(r.entry)) + kv("止损", f2(r.stop))
-    + kv("盈亏比", (num(r.rr) === null ? "—" : r.rr)) + kv("支撑 / 阻力", f2(r.support) + " / " + f2(r.resist))
-    + kv("站上均线", A.ab.join("/") || "—") + kv("受压均线", A.bl.join("/") || "—")
-    + kv("量较前日 / 换手", (r.vol === null || r.vol === undefined ? "—" : r.vol) + "% / " + (r.turn === null || r.turn === undefined ? "—" : r.turn) + "%")
-    + kv("潜力模型", (num(r.pot) === null ? "—" : r.pot + "/100")) + kv("封板", A.sealed ? "是" : "否")
-    + kv("风险标签", A.rk.join("、") || "—") + kv("新闻条数", (num(r.news) === null ? "—" : r.news))
-    + "</div>" + (r.theme ? '<div class="note">题材：' + esc(r.theme) + "</div>" : "") + "</div>"
-    + '<div class="mbox"><h4>已实现表现（快照自带 forward）</h4><table class="mini-tbl" style="min-width:auto"><thead><tr>'
+    + "<h2><a class=\"stk\" target=\"_blank\" rel=\"noopener\" href=\"https://gu.qq.com/" + esc(r.code) + "\">" + esc(r.name) + "</a> <span class=\"note\">" + esc(r.code) + "</span></h2>"
+    + deepChips(r)
+    + '<div class="kv" style="margin-top:4px">' + chips.map(function (c) { return "<span>" + esc(c) + "</span>"; }).join("") + "</div>"
+    + perfHtml(r)
+    + logicHtml(r, deep)
+    + techFlowHtml(r)
+    + valExpectHtml(r)
+    + riskHtml(r)
+    + opHtml(r, A)
+    + '<div class="mbox"><h4>已实现表现（T+1 ~ T+5，看板快照实际值）</h4><table class="mini-tbl" style="min-width:auto"><thead><tr>'
     + tArr.map(function (x) { return "<th>" + x[0] + "</th>"; }).join("") + "</tr></thead><tbody><tr>"
     + tArr.map(function (x) { var v = num(x[1]); return '<td class="' + clsPct(v) + '">' + (v === null ? "—" : signPct(v)) + "</td>"; }).join("") + "</tr></tbody></table></div>"
     + newsHtml
-    + '<div class="note" style="margin-top:12px">三个周期结论为规则化推导，依据已在每张卡片中逐条列出（支持／反向，并标注分值）；数据为快照值，不含滑点与流动性，<b>不构成投资建议</b>。</div>'
+    + '<div class="note" style="margin-top:12px">六模块由云端 deep-factors 全网因子（财报 / 研报 / 资金 / K 线衍生 / 解禁）规则化归纳生成，不引用看板调研结论；数据可能滞后或缺失（显示「—」），<b>不构成投资建议</b>。</div>'
     + "</div></div>";
   $("modalHost").innerHTML = html;
   $("modalHost").style.display = "block";
 }
 function openAnalyze(day, code) {
   var r = findRow(day, code); if (!r) return;
-  if (NEWS_IDX) { showModal(r, NEWS_IDX[code] || null, false); return; }
+  if (NEWS_IDX && (DEEP_MAP || DEEP_ERR)) { showModal(r, NEWS_IDX[code] || null, false); return; }
   showModal(r, null, true);
-  ensureNews().then(function (idx) { showModal(r, idx[code] || null, false); renderTable(); }).catch(function () { showModal(r, null, false); });
+  Promise.all([
+    NEWS_IDX ? Promise.resolve(NEWS_IDX) : ensureNews().catch(function () { return {}; }),
+    ensureDeep()
+  ]).then(function (rs) {
+    var idx = rs[0] || {};
+    NEWS_IDX = NEWS_IDX || idx;
+    showModal(r, idx[code] || null, false);
+    renderTable();
+  });
 }
 document.addEventListener("click", function (e) {
   var el = e.target;

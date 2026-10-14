@@ -4,6 +4,8 @@ on:
   push:
     branches: [main, master]
   workflow_dispatch:
+  repository_dispatch:
+    types: [next-round]
   schedule:
     # 每 10 分钟触发一次（UTC），刻意避开整点这个最拥挤的槽位。
     # 是否真的抓取由 src/schedule.js 按刷新节奏判断：
@@ -11,7 +13,9 @@ on:
     #   交易日 其他时段     -> 每 2 小时
     #   非交易日            -> 每 6 小时
     # 交易日用上证指数当日日K核对，A 股节假日自动按非交易日处理。
-    # 注意：schedule 在平台繁忙时会被延后，实际触发间隔可能长于 10 分钟。
+    # 注意：schedule 在平台繁忙时会被延后甚至整槽丢弃（2026-10-13 起实测一天只剩 3~4 次），
+    # 所以增加「自链触发」：每轮结束后用 repository_dispatch 主动拉起下一轮，
+    # cron 只作兜底。真正的抓取节奏仍由 src/schedule.js 控制，空转一轮只花几十秒。
     - cron: '4,14,24,34,44,54 * * * *'
 
 permissions:
@@ -38,11 +42,12 @@ jobs:
       - name: 判断本轮是否需要刷新
         id: decide
         run: |
-          if [ "${{ github.event_name }}" != "schedule" ]; then
+          if [ "${{ github.event_name }}" = "push" ] || [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo "run=true" >> "$GITHUB_OUTPUT"
             echo "非定时触发（${{ github.event_name }}），直接执行。"
             exit 0
           fi
+          # schedule 与自链的 repository_dispatch 一视同仁，都交给节奏判断
           set +e
           node src/schedule.js --check
           code=$?
@@ -89,6 +94,8 @@ jobs:
 
           # 新闻筛选个股存档：线上已有历史就以线上为准（首轮为空则从头开始记）
           curl -fsSL --retry 2 https://yunqingzou-bit.github.io/cls-news-dashboard/news-archive.json -o out/news-archive.json || true
+          # 深度因子缓存：继承上一次发布的资金/评级/商誉（deep-factors.js 12 小时内不重抓）
+          curl -fsSL --retry 2 https://yunqingzou-bit.github.io/cls-news-dashboard/deep-factors.json -o data/deep-factors.json || true
       - name: 抓取（只跑沪深A股池，避免把个人自选股带进公开页面）
         env:
           TZ: Asia/Shanghai
@@ -101,6 +108,11 @@ jobs:
             echo "WARN: 新闻源本轮抓取失败，使用线上上一版行数据，用当前代码继续渲染页面。"
             node tools/render-fallback.js
           fi
+
+      - name: 采集深度因子（主力资金 / 机构评级与目标价 / 商誉）
+        env:
+          TZ: Asia/Shanghai
+        run: node tools/deep-factors.js
 
       - name: 归档新闻筛选个股（新闻篮子逐日留档）
         env:
@@ -154,6 +166,7 @@ jobs:
           cp target-basket/index.html _site/target-basket/index.html
           cp news-archive/index.html _site/news-archive/index.html
           if [ -s out/news-archive.json ]; then cp out/news-archive.json _site/news-archive.json; fi
+          if [ -s out/deep-factors.json ]; then cp out/deep-factors.json _site/deep-factors.json; fi
           cp out/cls-news-latest.html _site/index.html
           cp out/cls-news-cards.html  _site/cards/index.html
           cp market-review/index.html _site/market-review/index.html
@@ -216,3 +229,35 @@ jobs:
     steps:
       - id: deployment
         uses: actions/deploy-pages@v4
+
+  # 自链触发：任意一轮（push / schedule / 自链 dispatch）结束后，等待 3~5 分钟
+  # 再用 repository_dispatch 拉起下一轮。GitHub 允许 GITHUB_TOKEN 触发
+  # repository_dispatch 并由此创建新的 workflow run，无需额外 PAT。
+  # 空转轮（gate 判定 run=false）只花几十秒；是否真抓取始终由 src/schedule.js 决定。
+  # 若链条意外中断（运行被取消、API 失败），10 分钟 cron 兜底会把链条续上。
+  chain:
+    needs: [gate, build, deploy]
+    if: always() && !cancelled()
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: 触发下一轮
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # gate/build/deploy 完成后随机等待 3~5 分钟，叠加上一轮构建耗时，
+          # 交易日盘中实际节奏约每 10~14 分钟一轮，符合 schedule.js 的 10 分钟档。
+          sleep $((180 + RANDOM % 120))
+          for i in 1 2 3; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' -X POST \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/${{ github.repository }}/dispatches" \
+              -d '{"event_type":"next-round","client_payload":{"from":"chain"}}')
+            echo "dispatch attempt $i -> http $code"
+            if [ "$code" = "204" ]; then exit 0; fi
+            sleep 20
+          done
+          echo "WARN: 自链触发失败，等待 10 分钟 cron 兜底续链。"
+          exit 0

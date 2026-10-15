@@ -252,7 +252,8 @@ function renderTools() {
     + '<input id="q" type="search" placeholder="\u641c\u7d22\u540d\u79f0 / \u4ee3\u7801 / \u6863\u4f4d\u2026" value="' + esc(STATE.q) + '">'
     + '<button class="tab" id="csv">\u5bfc\u51fa CSV</button>'
     + '<span class="cnt" id="cnt"></span>';
-  $("fday").onchange = function (e) { STATE.day = e.target.value; renderTools(); };
+  /* 日期切换只刷新表格与计数，不重建工具栏（重建会导致下拉失焦、键盘选择中断） */
+  $("fday").onchange = function (e) { STATE.day = e.target.value; renderTable(); };
   Array.prototype.forEach.call(document.querySelectorAll(".tab[data-bk]"), function (b) {
     b.onclick = function () { STATE.bucket = b.getAttribute("data-bk"); renderTools(); };
   });
@@ -1130,6 +1131,7 @@ function updateFoot() {
 }
 function boot(data, via) {
   var cols = data.columns || ["code", "name", "bucket", "tier", "close", "chg", "score", "rr", "entry", "stop", "pot", "sealed", "t1", "t2", "t3", "t4", "t5"];
+  var firstBoot = !STATE.dates.length;   // 首次加载才默认最新快照日；自动刷新/重连保留用户已选筛选
   var rows = [];
   (data.dates || []).forEach(function (d) {
     (d.rows || []).forEach(function (arr) {
@@ -1146,7 +1148,15 @@ function boot(data, via) {
   });
   STATE.rows = rows;
   STATE.dates = (data.dates || []).map(function (d) { return d.day; });
-  STATE.day = STATE.dates.length ? STATE.dates[0] : "";
+  /* 修复日期筛选失效：此前每次 boot 都强制 STATE.day = 最新快照日，而页面每 60s 检测存档更新、
+     看板盘中约每 10 分钟追加一轮 → 用户选定的日期几分钟内即被弹回最新日，表现为筛选「无法使用」。
+     现改为：仅首次加载回落到最新快照日；此后用户的选择（具体日期或「全部日期」）一律保留，
+     仅当所选日期已被 45 天滚动窗口淘汰时才回落最新。 */
+  if (firstBoot) {
+    STATE.day = STATE.dates.length ? STATE.dates[0] : "";
+  } else if (STATE.day && STATE.dates.indexOf(STATE.day) < 0) {
+    STATE.day = STATE.dates.length ? STATE.dates[0] : "";
+  }
   renderSub(data);
   renderTools();
   if (!NEWS_IDX) ensureNews().then(function () { renderTable(); }).catch(function () {});

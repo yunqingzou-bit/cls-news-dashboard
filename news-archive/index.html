@@ -333,8 +333,10 @@ function renderTable() {
 
 /* ---- 精选标的卡片区：短 / 中 / 长 各 3 只，置于列表上方 ----
  * 候选 = 当前筛选后的列表（按代码去重取最新存档日），规避一票否决股不入选；
- * 短期看可执行框架 + 盈亏比 + 资金，中期看趋势 + 资金/目标价空间 + 业绩，
- * 长期看估值 / ROE / 商誉 / 负债 / 机构覆盖度，各取综合得分最高的 3 只。 */
+ * 短期看可执行框架 + 盈亏比≥1 + 资金（追高剔除、破位需资金回流），
+ * 中期看趋势 + 资金/目标价高于现价 + 业绩（追高与破位剔除），
+ * 长期看估值 / ROE / 商誉 / 负债 / 机构覆盖度 / 中大盘市值，
+ * 三周期均要求档位达「谨慎可操作」以上，各取综合得分最高的 3 只。 */
 function renderPicks(list) {
   var host = $("picksHost"); if (!host) return;
   var seen = {}, uniq = [];
@@ -348,22 +350,30 @@ function renderPicks(list) {
     var A = analyze(r, null);
     if (A.veto && A.veto.length) return;                     // 规避股一律不进精选
     var chg = num(r.chg), mft = num(r.mft), mf20 = num(r.mf20);
-    var dkYoYv = num(r.dkYoY), chg20v = num(r.chg20);
+    var dkYoYv = num(r.dkYoY), chg20v = num(r.chg20), clv = num(r.close);
     var overheat = (chg20v !== null && chg20v >= 40 && (dkYoYv === null || dkYoYv < 30));
-    /* 短期：可执行框架（有低吸/止损价、未封板、涨幅未到板），按短期分 + 当日主力资金排序；
-       追高警示股（20 日暴涨且业绩跟不上）不入选 —— 对齐流程「追高警示」组 */
+    var fallingKnife = ((r.trend || "").indexOf("下降") === 0) || (chg20v !== null && chg20v <= -15);
+    /* 短期：可执行框架（有低吸/止损价、未封板、涨幅未到板）+ 盈亏比 ≥1，按短期分 + 当日主力资金排序；
+       追高警示股不入选（对齐流程「追高警示」组）；破位股仅在当日主力资金回流时保留
+       （对齐流程「超跌 + 资金回流才给反抽买点」，参考科泰电源案例）；档位需达「谨慎可操作」以上 */
     if ((r.bucket === "executable" || r.tier === "适合" || r.tier === "可关注")
       && num(r.entry) !== null && num(r.stop) !== null && !num(r.sealed)
-      && (chg === null || chg < 9) && !overheat) {
+      && (chg === null || chg < 9) && !overheat
+      && num(r.rr) !== null && num(r.rr) >= 1
+      && (!fallingKnife || (mft !== null && mft > 0))
+      && (A.short.verdict === "可操作" || A.short.verdict === "谨慎可操作")) {
       shorts.push({ r: r, A: A, sc: A.short.score + (mft !== null && mft > 0 ? 0.5 : 0) });
     }
-    /* 中期：趋势向上或区间 + 至少一项中期逻辑（资金流入 / 目标价空间 / 扣非增长），按中期分排序 */
+    /* 中期：趋势向上或区间 + 至少一项中期逻辑（资金流入 / 目标价高于现价 / 扣非增长），按中期分排序；
+       追高警示股（涨幅透支业绩，等回踩消化）与破位股（右侧确认前）不入选 —— 对齐流程「追高警示」「弱势规避」组 */
     var tr = r.trend || "";
     if (tr.indexOf("上升") >= 0 || tr.indexOf("区间") >= 0) {
-      if ((mf20 !== null && mf20 > 0) || num(r.tp) !== null || (num(r.dkYoY) !== null && r.dkYoY > 0)) {
+      if (!overheat && !fallingKnife
+        && (A.mid.verdict === "可操作" || A.mid.verdict === "谨慎可操作")
+        && ((mf20 !== null && mf20 > 0) || (num(r.tp) !== null && clv !== null && r.tp > clv) || (num(r.dkYoY) !== null && r.dkYoY > 0))) {
         mids.push({ r: r, A: A, sc: A.mid.score
           + (mf20 !== null ? Math.min(Math.max(mf20, 0), 5) / 5 : 0)
-          + ((num(r.tp) !== null && num(r.close) !== null && r.tp > r.close) ? 0.5 : 0) });
+          + ((num(r.tp) !== null && clv !== null && r.tp > clv) ? 0.5 : 0) });
       }
     }
     /* 长期：估值不透支 + 商誉/负债/ROE 达标 + 至少一项长期锚（长均线站上 / ROE≥8 / 有机构覆盖）；
@@ -372,7 +382,8 @@ function renderPicks(list) {
     var lg = arr(r.above);
     if ((pe === null || (pe > 0 && pe <= 60)) && (gwp === null || gwp < 15) && (debt === null || debt < 70)
       && (roe === null || roe > 0) && (mcap === null || mcap >= 50)
-      && (has(lg, "250") || has(lg, "120") || (roe !== null && roe >= 8) || (num(r.orgs) !== null && r.orgs >= 1))) {
+      && (has(lg, "250") || has(lg, "120") || (roe !== null && roe >= 8) || (num(r.orgs) !== null && r.orgs >= 1))
+      && (A.long.verdict === "可操作" || A.long.verdict === "谨慎可操作")) {
       longs.push({ r: r, A: A, sc: A.long.score + ((num(r.orgs) !== null && r.orgs >= 1) ? 0.5 : 0) + ((mcap !== null && mcap >= 120) ? 0.5 : 0) });
     }
   });
@@ -420,7 +431,7 @@ function renderPicks(list) {
     + col("c-m", "中期精选（1~3 个月）", mids.length + "/3", mids, "mid", optMidC)
     + col("c-l", "长期精选（6 个月+）", longs.length + "/3", longs, "long", optLongC)
     + "</div>"
-    + '<div class="note" style="margin:0 0 14px">精选口径：规避一票否决股不入选；短期按可执行框架 + 当日主力资金（追高警示股剔除）、中期按趋势 + 资金/目标价空间/扣非增长、长期按估值/ROE/商誉/负债/机构覆盖度 + 中大盘门槛（市值 ≥50 亿优先 ≥120 亿）综合排序取前 3。点击卡片打开完整深研卡。<b>不构成投资建议。</b></div>';
+    + '<div class="note" style="margin:0 0 14px">精选口径：规避一票否决股不入选，档位需达「谨慎可操作」以上；短期按可执行框架 + 盈亏比 ≥1 + 当日主力资金（追高警示股剔除、破位股仅在主力资金回流时保留）；中期按趋势 + 资金/目标价高于现价/扣非增长（追高警示与破位股剔除）；长期按估值/ROE/商誉/负债/机构覆盖度 + 中大盘门槛（市值 ≥50 亿优先 ≥120 亿）综合排序取前 3。点击卡片打开完整深研卡。<b>不构成投资建议。</b></div>';
 }
 
 function currentList() {

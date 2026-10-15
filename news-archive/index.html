@@ -165,8 +165,8 @@ border:1px solid var(--warn-b);color:var(--warn);font-size:12.5px}
 以及看板快照自带的 <b data-page-node-id="IGARwoShy0zZA0W5tO1Qp5">T+1 ~ T+5</b> 后续涨跌。
 <ul data-page-node-id="FTtjpouvxHQOBJ31exKx1y">
 <li data-page-node-id="gDFtZRgefEtix1rLYVBu5J"><b data-page-node-id="314Z4xCK8RQ8leF41SkuZR">覆盖口径</b>：看板 <code data-page-node-id="lyOmt6CttGpfrHBUpzGxzH">news.json</code> 快照中出现的<b data-page-node-id="p1UqDN3aQZ1WQdygfWH0RE">全部股票</b>（剔除仅由「龙虎榜」相关栏目命中的个股，栏目名含「龙虎榜」即视为龙虎榜系）。四桶（可执行 / 观察 / 回避 / 复盘池）沿用「可交易清单」的 aggregate / classify 口径；未落入四桶的股票以<b data-page-node-id="Zs5Ej2j02zgpccWfa2wcSv">「纳入」</b>桶全量归档，不按分数漏股。</li>
-<li data-page-node-id="cPOqxxDywYY34ChVrjrzg0"><b data-page-node-id="PI6AuSKYtk0A6YJlyrXBRZ">深度因子</b>（按《深度研报分析流程》采集）：① <b data-page-node-id="bZIlT6Ri99uxXgeSVQyNrQ">主力资金流向</b>（当日 + 近 20 日，东财主源 / 新浪备用）；② <b data-page-node-id="fWQV1uVuwZZipIJ9VfAvUp">机构评级与一致目标价</b>（近 90 天研报：评级、机构家数、买入+增持占比、目标价均值与隐含空间）；③ <b data-page-node-id="SdaAEwjjP7RWbAgoE6ReUF">商誉与负债率</b>（最新报告期）；④ <b data-page-node-id="vR2CwQinK5kvGnXpyLFGE4">估值快照</b>（PE/PB/总市值/量比，腾讯批量行情）；⑤ <b data-page-node-id="CxzQKF2XDgfYflHzlsoot1">技术面衍生</b>（RSI14、距 60 日高点回撤、20 日波动率、MA20 斜率、量能比，60 日日K 计算）；⑥ <b data-page-node-id="VPJz11YTiFXzYMDo1w1S79">业绩因子</b>（营收/归母/扣非同比、毛利率、ROE，含归母 vs 扣非背离校验）；⑦ <b data-page-node-id="wRNoYNw9XkgrpnZMuJiraM">限售解禁</b>（未来最近一次日期/市值/占比）。由云端 deep-factors.js 采集并随快照存档；未取得时显示「—」，不影响其余结论。</li>
-<li data-page-node-id="Ky5mU5SeJ9gOeE0TdrGRRj"><b data-page-node-id="PgKHdNuqJc8RSMPvoiAhaQ">交叉验证裁决</b>：分析弹窗在综合结论下方给出「技术面 × 基本面 × 资金面」三维校验——目标价验证（现价超一致目标价 → 不追高）、逻辑冲突降级（技术面强但亏损/PE 极高 → 事件博弈降档）、非经常损益校验（表观增速与扣非背离 → 以扣非定性）、风险一票否决（商誉占比 ≥30%、亏损纯题材、PE>150）、解禁日历（90 日内大额解禁提示减仓窗口）、位置提示（贴近 60 日新高追高谨慎）。</li>
+<li data-page-node-id="cPOqxxDywYY34ChVrjrzg0"><b data-page-node-id="PI6AuSKYtk0A6YJlyrXBRZ">深度因子</b>（按《深度研报分析流程》采集）：① <b data-page-node-id="bZIlT6Ri99uxXgeSVQyNrQ">主力资金流向</b>（当日 + 近 20 日，东财主源 / 新浪备用）；② <b data-page-node-id="fWQV1uVuwZZipIJ9VfAvUp">机构评级与一致目标价</b>（近 90 天研报：评级、机构家数、买入+增持占比、目标价均值与隐含空间）；③ <b data-page-node-id="SdaAEwjjP7RWbAgoE6ReUF">商誉与负债率</b>（最新报告期）；④ <b data-page-node-id="vR2CwQinK5kvGnXpyLFGE4">估值快照</b>（PE/PB/总市值/量比，腾讯批量行情）；⑤ <b data-page-node-id="CxzQKF2XDgfYflHzlsoot1">技术面衍生</b>（RSI14、距 60 日高点回撤、20 日波动率、MA20 斜率、量能比，60 日日K 计算）；⑥ <b data-page-node-id="VPJz11YTiFXzYMDo1w1S79">业绩因子</b>（营收/归母/扣非同比、毛利率、ROE，含归母 vs 扣非背离校验）；⑦ <b data-page-node-id="wRNoYNw9XkgrpnZMuJiraM">限售解禁</b>（未来最近一次日期/市值/占比）；⑧ <b>业绩验证日历</b>（未来最近一次预约披露日 + 最新业绩预告类型与净利区间，东财数据中心）。由云端 deep-factors.js 采集并随快照存档；未取得时显示「—」，不影响其余结论。</li>
+<li data-page-node-id="Ky5mU5SeJ9gOeE0TdrGRRj"><b data-page-node-id="PgKHdNuqJc8RSMPvoiAhaQ">交叉验证裁决</b>：分析弹窗在综合结论下方给出「技术面 × 基本面 × 资金面」三维校验——目标价验证（现价超一致目标价 → 不追高）、逻辑冲突降级（技术面强但亏损/PE 极高 → 事件博弈降档）、非经常损益校验（表观增速与扣非背离 → 以扣非定性）、风险一票否决（商誉占比 ≥30%、亏损纯题材、PE>150）、解禁日历（90 日内大额解禁提示减仓窗口）、位置提示（贴近 60 日新高追高谨慎）、追高警示（20 日涨幅透支且跑在扣非增速前面 → 情绪外溢勿追，短期/中期档位封顶「谨慎可操作」）、破位勿接飞刀（下降趋势 / 20 日跌 15%+ → 等缩量企稳+站回 MA20 右侧确认）、财报验证日历（45 日内预约披露日作为逻辑证伪/证实节点，披露前仓位保守）。</li>
 <li data-page-node-id="8JV9R56U8oQhGBZRxe1mrK"><b data-page-node-id="qnBDwkg54cyceCdA6O9Jvs">发布时间</b>：表格「发布时间」列为该股在财联社看板中<b data-page-node-id="xcCAgZbR2ZvUvDlXdLhOxd">最新一条相关新闻的发布时间</b>（取自快照 time 字段）；顶部日期筛选仍按快照日分组。点击<b data-page-node-id="jCDlaNFushsHUo2dBdyAle">股票名称</b>可在腾讯自选股（gu.qq.com）打开个股页。</li>
 <li data-page-node-id="RqGswXSt5NU8XW6XPOcs4g"><b data-page-node-id="Togyrygg6RsGHbZMhTcxLi">档位 / 分桶 / 评分逻辑</b>：① <b data-page-node-id="lR6vs7BeyvRVWj2Vxje4Pu">档位</b>取看板多条新闻中更强的博弈档位（适合 &gt; 可关注 &gt; 中性 &gt; 不适合 &gt; 样本不足），价位随档位同步；② <b data-page-node-id="wW85Cc0qXx7sunwxShYw3X">可执行</b> = 可交易 + 未封板且未接近涨停（按 10/20/5cm 板块限制各自判断，替代原硬编码 9.5%）+ 站上 20 日线 + 非下降趋势 + 风险标签 &lt; 2 + 无减持/立案 + 盈亏比 ≥1.5 + 现价不低于低吸位；③ <b data-page-node-id="0aIJjMwdNAx0laBPewbArI">回避修正</b>：原逻辑要求可执行分 &lt; 20 才回避，导致「不适合」档位、减持/立案、双风险标签但催化较多的股票滑入观察——现改为上述明确负面信号<b data-page-node-id="EiUA45J3pDglhAqMxfEBMC">直接回避</b>（下降趋势仍保留分数门槛）；④ <b data-page-node-id="WdHHXS289sKpDFGoVyslPe">量能惩罚修正</b>：原「量比 ≥ 前日 100% 即扣分」会惩罚正常温和放量，改为 ≥250% 扣 3 分、≥400% 扣 5 分（与其 Stockbee 统计「放量越极端短期回撤越大」一致）；⑤ <b data-page-node-id="eYfO2qdVbkOfPtZA1rc9NV">潜力分</b>沿用看板模型分（0–100）线性映射；⑥ 盈亏比目标价统一按现价 +8% 估算（口径一致的保守假设）。</li>
 <li data-page-node-id="IdSPZbTba87Dp0Y54CE8sL"><b data-page-node-id="wBxcfdHIFC2TzMYd5se2jj">归档节奏</b>：每轮快照（盘中约 10 分钟）追加到当日，按日去重，最多保留最近 45 个快照日。</li>
@@ -348,10 +348,13 @@ function renderPicks(list) {
     var A = analyze(r, null);
     if (A.veto && A.veto.length) return;                     // 规避股一律不进精选
     var chg = num(r.chg), mft = num(r.mft), mf20 = num(r.mf20);
-    /* 短期：可执行框架（有低吸/止损价、未封板、涨幅未到板），按短期分 + 当日主力资金排序 */
+    var dkYoYv = num(r.dkYoY), chg20v = num(r.chg20);
+    var overheat = (chg20v !== null && chg20v >= 40 && (dkYoYv === null || dkYoYv < 30));
+    /* 短期：可执行框架（有低吸/止损价、未封板、涨幅未到板），按短期分 + 当日主力资金排序；
+       追高警示股（20 日暴涨且业绩跟不上）不入选 —— 对齐流程「追高警示」组 */
     if ((r.bucket === "executable" || r.tier === "适合" || r.tier === "可关注")
       && num(r.entry) !== null && num(r.stop) !== null && !num(r.sealed)
-      && (chg === null || chg < 9)) {
+      && (chg === null || chg < 9) && !overheat) {
       shorts.push({ r: r, A: A, sc: A.short.score + (mft !== null && mft > 0 ? 0.5 : 0) });
     }
     /* 中期：趋势向上或区间 + 至少一项中期逻辑（资金流入 / 目标价空间 / 扣非增长），按中期分排序 */
@@ -363,13 +366,14 @@ function renderPicks(list) {
           + ((num(r.tp) !== null && num(r.close) !== null && r.tp > r.close) ? 0.5 : 0) });
       }
     }
-    /* 长期：估值不透支 + 商誉/负债/ROE 达标 + 至少一项长期锚（长均线站上 / ROE≥8 / 有机构覆盖） */
-    var pe = num(r.pe), roe = num(r.roe), gwp = num(r.gwp), debt = num(r.debt);
+    /* 长期：估值不透支 + 商誉/负债/ROE 达标 + 至少一项长期锚（长均线站上 / ROE≥8 / 有机构覆盖）；
+       中大盘门槛（总市值 ≥50 亿，≥120 亿优先）—— 对齐流程长期筛选「总市值 >120 亿」要求 */
+    var pe = num(r.pe), roe = num(r.roe), gwp = num(r.gwp), debt = num(r.debt), mcap = num(r.mcap);
     var lg = arr(r.above);
     if ((pe === null || (pe > 0 && pe <= 60)) && (gwp === null || gwp < 15) && (debt === null || debt < 70)
-      && (roe === null || roe > 0)
+      && (roe === null || roe > 0) && (mcap === null || mcap >= 50)
       && (has(lg, "250") || has(lg, "120") || (roe !== null && roe >= 8) || (num(r.orgs) !== null && r.orgs >= 1))) {
-      longs.push({ r: r, A: A, sc: A.long.score + ((num(r.orgs) !== null && r.orgs >= 1) ? 0.5 : 0) });
+      longs.push({ r: r, A: A, sc: A.long.score + ((num(r.orgs) !== null && r.orgs >= 1) ? 0.5 : 0) + ((mcap !== null && mcap >= 120) ? 0.5 : 0) });
     }
   });
   function top3(a) { return a.sort(function (x, y) { return y.sc - x.sc; }).slice(0, 3); }
@@ -416,7 +420,7 @@ function renderPicks(list) {
     + col("c-m", "中期精选（1~3 个月）", mids.length + "/3", mids, "mid", optMidC)
     + col("c-l", "长期精选（6 个月+）", longs.length + "/3", longs, "long", optLongC)
     + "</div>"
-    + '<div class="note" style="margin:0 0 14px">精选口径：规避一票否决股不入选；短期按可执行框架 + 当日主力资金、中期按趋势 + 资金/目标价空间/扣非增长、长期按估值/ROE/商誉/负债/机构覆盖度综合排序取前 3。点击卡片打开完整深研卡。<b>不构成投资建议。</b></div>';
+    + '<div class="note" style="margin:0 0 14px">精选口径：规避一票否决股不入选；短期按可执行框架 + 当日主力资金（追高警示股剔除）、中期按趋势 + 资金/目标价空间/扣非增长、长期按估值/ROE/商誉/负债/机构覆盖度 + 中大盘门槛（市值 ≥50 亿优先 ≥120 亿）综合排序取前 3。点击卡片打开完整深研卡。<b>不构成投资建议。</b></div>';
 }
 
 function currentList() {
@@ -550,6 +554,12 @@ function analyze(r, en) {
   var rk = String(r.risk || "").split("|").filter(Boolean);
   var SEALED = !!num(r.sealed), rr = num(r.rr);
 
+  /* 追高警示（对齐流程「追高警示」组）：短期暴涨且涨幅跑在扣非增速前面 → 情绪外溢，勿追高 */
+  var chg20v = num(r.chg20);
+  var overheat = (chg20v !== null && chg20v >= 40 && (num(r.dkYoY) === null || num(r.dkYoY) < 30));
+  /* 破位勿接飞刀（对齐流程「弱势规避」）：下降趋势或 20 日跌 15%+ → 等缩量企稳+站回 MA20 右侧再进 */
+  var fallingKnife = ((r.trend || "").indexOf("下降") === 0) || (chg20v !== null && chg20v <= -15);
+
   var s = 0, SR = [];
   function aS(d, t) { s += d; SR.push({ d: d, t: t }); }
   if (r.bucket === "executable") aS(2, "\u53ef\u6267\u884c\u6876\uff1a\u5df2\u901a\u8fc7\u98ce\u63a7\u4e0e\u7ed3\u6784\u7b5b\u9009");
@@ -589,6 +599,8 @@ function analyze(r, en) {
   }
   if (vrq !== null && vrq >= 1.5) aS(0.5, "量能比 5日/20日 " + vrq + "：放量，资金参与度高");
   else if (vrq !== null && vrq < 0.6) aS(-0.5, "量能比 " + vrq + "：明显缩量，动能不足");
+  if (overheat) aS(-1.5, "追高警示：20 日已涨 " + chg20v + "%，明显跑在业绩（扣非同比 " + (num(r.dkYoY) === null ? "缺失" : r.dkYoY + "%") + "）前面，属情绪外溢，勿追高");
+  if (fallingKnife) aS(-0.5, "破位下行：勿接飞刀，等缩量企稳并站回 20 日线（右侧确认）再进");
   if (num(r.t1) !== null) SR.push({ d: 0, t: "\uff08\u53c2\u8003\uff09T+1 \u5b9e\u9645\u8868\u73b0 " + signPct(r.t1) + "\uff08\u5df2\u5b9e\u73b0\uff0c\u4e0d\u8ba1\u5165\u8bc4\u5206\uff09" });
 
   var m = 0, MR = [];
@@ -641,6 +653,8 @@ function analyze(r, en) {
     else if (dd60 <= -30) aM(0.5, "距 60 日高点 " + dd60 + "%：深度回撤，关注超跌修复");
   }
   if (v20 !== null && v20 >= 4.5) aM(-0.5, "20 日波动率 " + v20 + "%：情绪票，回撤风险大");
+  if (overheat) aM(-1, "追高警示：20 日 +" + chg20v + "% 与扣非增速不匹配，短期涨幅透支，等回踩消化");
+  if (fallingKnife) aM(-0.5, "破位：20 日 " + (chg20v === null ? "—" : chg20v + "%") + "，右侧信号（缩量+站回 MA20）出现前不介入");
   if (num(r.bad)) aM(-1, "\u8fd1\u534a\u5e74\u6709\u51cf\u6301/\u76d1\u7ba1\u516c\u544a");
   if (rk.length >= 2) aM(-1, "\u57fa\u672c\u9762\u98ce\u9669\u6807\u7b7e " + rk.length + " \u4e2a\uff1a" + rk.join("\u3001"));
   else if (rk.length === 1) aM(-0.5, "\u98ce\u9669\u6807\u7b7e\uff1a" + rk[0]);
@@ -718,8 +732,18 @@ function analyze(r, en) {
     LR.push({ d: -2, t: "规避信号（一票否决，不看分数）：" + t });
   });
 
-  function vs(x) { return V.length ? "规避" : (x >= 3.5 ? "可操作" : x >= 1.5 ? "谨慎可操作" : x >= 0 ? "观察" : "不适合操作"); }
-  function vm2(x) { return V.length ? "规避" : (x >= 3 ? "可操作" : x >= 1 ? "谨慎可操作" : x >= 0 ? "观察" : "不适合操作"); }
+  function vs(x) {
+    if (V.length) return "规避";
+    var v = x >= 3.5 ? "可操作" : x >= 1.5 ? "谨慎可操作" : x >= 0 ? "观察" : "不适合操作";
+    if (overheat && v === "可操作") v = "谨慎可操作";   // 追高警示：短期档位封顶，不给"可操作"
+    return v;
+  }
+  function vm2(x) {
+    if (V.length) return "规避";
+    var v = x >= 3 ? "可操作" : x >= 1 ? "谨慎可操作" : x >= 0 ? "观察" : "不适合操作";
+    if (overheat && v === "可操作") v = "谨慎可操作";   // 追高警示：中期档位同步封顶
+    return v;
+  }
   function vl(x) { return V.length ? "规避" : (x >= 2 ? "可操作" : x >= 0 ? "观察" : "不适合操作"); }
 
   var optShort = (num(r.entry) !== null && num(r.stop) !== null)
@@ -728,6 +752,7 @@ function analyze(r, en) {
   if (SEALED) optShort += "；封板股放到次日竞价 <5% 再说，一字板放弃";
   var optMid = press.length ? "需收复 " + press.join("/") + " 日线才具备中期上行条件" : "沿 " + (has(ab, "20") ? "20" : "5") + " 日线持有，跌破转弱";
   if (num(r.resist) !== null) optMid += "；突破阻力 " + f2(r.resist) + " 可加仓";
+  if (fallingKnife) { optShort += "；破位下行中不接飞刀，等缩量企稳并站回 20 日线右侧再进"; optMid += "；右侧信号（缩量+站回 MA20）出现前不介入"; }
   var optLong = hasAll(ab, lng) ? "长线可分批跟踪，以 250 日线为长期多空分界" : "需站上 250 日线且业绩/估值改善再考虑；否则仅跟踪";
 
   return {
@@ -743,7 +768,7 @@ function vCls(v) { return v === "\u53ef\u64cd\u4f5c" ? "v-ok" : (v === "\u8c28\u
 function crossCheck(r) {
   var out = [];
   var cl = num(r.close), tp = num(r.tp), npY = num(r.npYoY), dkY = num(r.dkYoY);
-  var pe = num(r.pe), gwp = num(r.gwp), dd60 = num(r.dd60);
+  var pe = num(r.pe), gwp = num(r.gwp), dd60 = num(r.dd60), chg20 = num(r.chg20);
   var upTrend = (r.trend || "").indexOf("上升") === 0;
   var strong = upTrend || (arr(r.above).indexOf("20") >= 0);
   // ① 目标价验证 / 无空间降级
@@ -773,6 +798,21 @@ function crossCheck(r) {
   }
   // ⑥ 位置提示
   if (dd60 !== null && dd60 > -3 && (r.bucket !== "avoid")) out.push({ lv: "note", tag: "位置提示", text: "距 60 日高点仅 " + dd60 + "%：贴近新高，追高胜率下降，等回踩或突破放量确认" });
+  // ⑦ 追高警示：短期涨幅透支 vs 扣非增速（对齐流程「追高警示」组）
+  if (chg20 !== null && chg20 >= 40 && (dkY === null || dkY < 30) && r.bucket !== "avoid") {
+    out.push({ lv: "warn", tag: "追高警示", text: "20 日已涨 " + chg20 + "%，明显跑在业绩（扣非同比 " + (dkY === null ? "缺失" : dkY + "%") + "）前面：情绪外溢，勿追高，等回踩消化后再看" });
+  }
+  // ⑧ 破位勿接飞刀：下降趋势 / 20 日跌 15%+ → 右侧确认（对齐流程「弱势规避」）
+  if ((r.trend || "").indexOf("下降") === 0 || (chg20 !== null && chg20 <= -15)) {
+    out.push({ lv: "warn", tag: "破位提示", text: "下降趋势 / 20 日 " + (chg20 === null ? "—" : chg20 + "%") + "：破位股不接飞刀，等缩量企稳并站回 MA20 的右侧信号再进" });
+  }
+  // ⑨ 财报验证日历：预约披露日作为证伪/证实节点（对齐流程「验证日历」）
+  if (r.rptDate) {
+    var dRpt = Math.round((Date.parse(r.rptDate) - Date.now()) / 86400000);
+    if (dRpt >= 0 && dRpt <= 45) {
+      out.push({ lv: "note", tag: "财报验证日历", text: r.rptDate + "（" + dRpt + " 天后）预约披露财报" + (r.fcast ? "，已有业绩预告：" + r.fcast : "") + "：把披露日作为逻辑证伪/证实节点，披露前仓位保守" });
+    }
+  }
   if (!out.length) out.push({ lv: "ok", tag: "交叉验证", text: "技术面 × 基本面 × 资金面三维未见冲突，按三周期卡片结论执行即可" });
   return out;
 }
@@ -799,6 +839,10 @@ function deepChips(r) {
   if (num(r.rsi) !== null) c.push("RSI " + r.rsi);
   var tpT = (num(r.tpLow) !== null && num(r.tpHigh) !== null && r.tpLow !== r.tpHigh) ? r.tpLow + "~" + r.tpHigh : (num(r.tp) !== null ? String(r.tp) : null);
   if (tpT) c.push("机构目标价 <b>" + tpT + " 元</b>" + (spaceTxt(r) ? "（空间 " + spaceTxt(r) + "）" : ""));
+  if (r.rptDate) {
+    var dRptC = Math.round((Date.parse(r.rptDate) - Date.now()) / 86400000);
+    if (dRptC >= 0 && dRptC <= 45) c.push("财报披露 <b>" + esc(r.rptDate) + "</b>（" + dRptC + " 天后，验证节点）");
+  }
   return '<div class="kv" style="margin-top:6px">' + c.map(function (x) { return "<span>" + x + "</span>"; }).join("") + "</div>";
 }
 
@@ -977,7 +1021,13 @@ function opHtml(r, A) {
       stops.push("跌破近期低点（60 日低点约 " + f2(cl / (1 + (num(r.up60) || 0) / 100)) + "）止损");
     }
   }
-  if (num(r.rsi) !== null && r.rsi <= 28) buys.push("RSI14 " + r.rsi + " 超卖，反抽窗口可分批");
+  if (num(r.rsi) !== null && r.rsi <= 28) {
+    if ((num(r.mft) !== null && r.mft > 0) || (num(r.mf5) !== null && r.mf5 > 0)) {
+      buys.push("RSI14 " + r.rsi + " 超卖且主力资金回流（当日/5日净流入为正）：超跌反抽窗口可分批");
+    } else {
+      buys.push("RSI14 " + r.rsi + " 超卖但暂无资金回流：仅观察反抽力度，资金回流前不急于接");
+    }
+  }
   if (num(r.sealed)) buys.push("收盘封板：次日一字板放弃，竞价涨幅 <5% 再考虑");
   if (tp !== null) goals.push("第一目标：一致目标价 " + tp + " 元" + (spaceTxt(r) ? "（" + spaceTxt(r) + "）" : ""));
   if (tpH !== null && tpH !== tp) goals.push("弹性目标：" + tpH + " 元");

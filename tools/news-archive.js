@@ -452,6 +452,8 @@ var COLS = ['code', 'name', 'bucket', 'tier', 'close', 'chg', 'score', 'rr', 'en
             'rev', 'np', 'dk', 'rptName',
             'chg5', 'chg10', 'chg20', 'mf5', 'mf10', 'kdjJ', 'ma20v', 'ma60v',
             'tpLow', 'tpHigh', 'eps26', 'eps27', 'buyCnt', 'addCnt', 'ratedCnt',
+            /* 深度因子 v4：业绩验证日历（预约披露日 + 业绩预告，披露日为证伪/证实节点） */
+            'rptDate', 'fcast',
             /* 看板新闻发布时间（该股在当前快照中最新一条新闻的 time） */
             'ptime'];
 var N_FIXED = 17;   // t1..t5 结束位置（分析因子从第 17 个下标起）
@@ -538,6 +540,8 @@ function main() {
       dnum('rev'), dnum('np'), dnum('dk'), df.rptName || null,
       dnum('chg5'), dnum('chg10'), dnum('chg20'), dnum('mf5'), dnum('mf10'), dnum('kdjJ'), dnum('ma20v'), dnum('ma60v'),
       dnum('tpLow'), dnum('tpHigh'), dnum('eps26'), dnum('eps27'), dnum('buyCnt'), dnum('addCnt'), dnum('ratedCnt'),
+      /* 深度因子 v4：业绩验证日历 */
+      df.rptDate || null, df.fcast || null,
       /* 看板新闻发布时间：aggregate 已按时间倒序，news[0] 即最新一条 */
       (S.news && S.news[0] && S.news[0].time) ? String(S.news[0].time) : null];
   });

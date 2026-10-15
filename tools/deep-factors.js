@@ -11,6 +11,8 @@
  *                      距60日低点涨幅、20日波动率、MA20 斜率、5日/20日量能比
  *     6. 业绩因子       东财业绩报表 + F10 主要指标：营收/归母/扣非同比、毛利率、ROE、报告期
  *     7. 限售解禁       东财数据中心：未来最近一次解禁日期/市值/占总股本比例
+ *     8. 业绩验证日历   东财数据中心：未来最近一次预约披露日（RPT_PUBLIC_BS_APPOIN）
+ *                      + 最新业绩预告类型与净利区间（RPT_PUBLIC_OP_NEWPREDICT）
  *   输入：out/cls-news-latest.json（本轮快照，与 news-archive 覆盖口径一致：
  *         剔除仅由龙虎榜相关栏目命中的个股）
  *   缓存：data/deep-factors.json（重因子 12 小时缓存，估值快照每轮全量刷新）
@@ -409,13 +411,46 @@ function fetchLift(code) {
   }).catch(function () { return null; });
 }
 
+/* ---------- 8. 业绩验证日历（预约披露日 + 业绩预告；披露日作为证伪/证实节点） ---------- */
+function fetchEarningsCal(code) {
+  var m = /^[a-z]{2}(\d{6})$/i.exec(code);
+  if (!m) return Promise.resolve(null);
+  var today = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
+  var appointUrl = 'https://datacenter-web.eastmoney.com/api/data/v1/get?sortColumns=APPOINT_PUBLISH_DATE&sortTypes=1&pageSize=4&pageNumber=1'
+    + '&reportName=RPT_PUBLIC_BS_APPOIN&columns=SECURITY_CODE,APPOINT_PUBLISH_DATE,REPORT_DATE'
+    + '&filter=(SECURITY_CODE%3D%22' + m[1] + '%22)(APPOINT_PUBLISH_DATE%3E%3D%27' + today + '%27)';
+  var fcastUrl = 'https://datacenter-web.eastmoney.com/api/data/v1/get?sortColumns=NOTICE_DATE&sortTypes=-1&pageSize=1&pageNumber=1'
+    + '&reportName=RPT_PUBLIC_OP_NEWPREDICT&columns=ALL&filter=(SECURITY_CODE%3D%22' + m[1] + '%22)';
+  return fetchJson(appointUrl).then(function (d) {
+    var rows = ((d.result || {}).data) || [];
+    var appoint = rows.length ? String(rows[0].APPOINT_PUBLISH_DATE || '').slice(0, 10) : null;
+    return fetchJson(fcastUrl).then(function (d2) {
+      var frows = ((d2.result || {}).data) || [];
+      var f = frows.length ? frows[0] : null;
+      var fcast = null;
+      if (f) {
+        var ftype = f.PREDICT_TYPE || null;
+        var lo = Number(f.ADD_AMP_LOWER), hi = Number(f.ADD_AMP_UPPER);            // 预告净利同比幅度 %
+        var loA = Number(f.PREDICT_AMT_LOWER), hiA = Number(f.PREDICT_AMT_UPPER);  // 预告净利金额（元）
+        var range = null;
+        if (isFinite(lo) && isFinite(hi)) range = '净利同比 ' + r1(lo) + '%~' + r1(hi) + '%';
+        else if (isFinite(loA) && isFinite(hiA)) range = '净利 ' + r2(loA / 1e8) + '~' + r2(hiA / 1e8) + ' 亿';
+        else if (f.PREDICT_CONTENT) range = String(f.PREDICT_CONTENT).slice(0, 40);
+        if (ftype && range) fcast = ftype + '：' + range;
+        else if (ftype) fcast = ftype;
+      }
+      return { rptDate: appoint, fcast: fcast };
+    });
+  }).catch(function () { return null; });
+}
+
 /* ---------- 主流程 ---------- */
 function fetchOne(e) {
   return Promise.all([
     fetchMoneyFlow(e.code), fetchRatings(e.code), fetchBalanceSheet(e.code),
-    fetchKlineTech(e.code), fetchPerformance(e.code), fetchLift(e.code)
+    fetchKlineTech(e.code), fetchPerformance(e.code), fetchLift(e.code), fetchEarningsCal(e.code)
   ]).then(function (rs) {
-    var mf = rs[0] || {}, rt = rs[1] || {}, bs = rs[2] || {}, tech = rs[3] || {}, pf = rs[4] || {}, lf = rs[5] || {};
+    var mf = rs[0] || {}, rt = rs[1] || {}, bs = rs[2] || {}, tech = rs[3] || {}, pf = rs[4] || {}, lf = rs[5] || {}, ec = rs[6] || {};
     return {
       code: e.code, name: e.name,
       mft: mf.mft || null, mf5: mf.mf5 === undefined ? null : mf.mf5,
@@ -451,6 +486,7 @@ function fetchOne(e) {
       gm: pf.gm === undefined ? null : pf.gm, roe: pf.roe === undefined ? null : pf.roe,
       liftDate: lf.liftDate || null, liftCap: lf.liftCap === undefined ? null : lf.liftCap,
       liftPct: lf.liftPct === undefined ? null : lf.liftPct,
+      rptDate: ec.rptDate || null, fcast: ec.fcast === undefined ? null : ec.fcast,
       t: new Date().toISOString()
     };
   });
@@ -502,7 +538,7 @@ function main() {
       fs.writeFileSync(CACHE, JSON.stringify(cache), 'utf8');
       fs.mkdirSync(path.dirname(OUT), { recursive: true });
       fs.writeFileSync(OUT, JSON.stringify(out), 'utf8');
-      var cnt = { mf: 0, tp: 0, gw: 0, perf: 0, tech: 0, lift: 0, val: 0 };
+      var cnt = { mf: 0, tp: 0, gw: 0, perf: 0, tech: 0, lift: 0, val: 0, cal: 0 };
       Object.keys(outFactors).forEach(function (c) {
         var f = outFactors[c];
         if (f.mf20 !== null && f.mf20 !== undefined) cnt.mf++;
@@ -512,10 +548,12 @@ function main() {
         if (f.rsi14 !== null && f.rsi14 !== undefined) cnt.tech++;
         if (f.liftDate) cnt.lift++;
         if (f.pe !== null && f.pe !== undefined) cnt.val++;
+        if (f.rptDate) cnt.cal++;
       });
       console.log('深度因子完成（共 ' + stocks.length + ' 只）：资金 ' + cnt.mf
         + ' | 目标价 ' + cnt.tp + ' | 商誉 ' + cnt.gw + ' | 业绩 ' + cnt.perf
-        + ' | 技术面 ' + cnt.tech + ' | 估值 ' + cnt.val + ' | 解禁日 ' + cnt.lift);
+        + ' | 技术面 ' + cnt.tech + ' | 估值 ' + cnt.val + ' | 解禁日 ' + cnt.lift
+        + ' | 财报日历 ' + cnt.cal);
     });
   }).catch(function (e) {
     console.log('WARN: 深度因子采集失败：' + (e && e.message));

@@ -23,7 +23,7 @@ const CACHE_FILE = path.join(collectMod.DATA_DIR, 'technical.json');
 const SINA = 'https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CN_MarketData.getKLineData';
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131 Safari/537.36';
 // 指标口径版本：周线→日线、均线组合变更等，都必须递增，旧缓存整体作废重算
-const CACHE_VER = 3;
+const CACHE_VER = 4;
 
 /* ------------------------------------------------------------ 取数 */
 
@@ -213,42 +213,98 @@ function kdjOf(bars, n) {
 }
 
 /**
- * 动能分（0-100）：把三个常用动能指标合成一个可比较、可排序的分值。
- *   RSI(14)：50 以上越强越高，70 以上按超买回落 —— rsi ≤ 70 取 rsi，> 70 取 140 − rsi（权重 30%）
- *   KDJ   ：50 + (K−D)×1.5（金叉强度）+ (K−50)×0.5（相对位置），J 超买(>100)/超卖(<0) 各扣 10（权重 30%）
- *   MACD  ：50 + 柱状占股价百分比×10 + DIF 零轴上下的 ±12 + 柱状走强走弱的 ±6（权重 40%）
- * 某个指标算不出（样本不够）时，把它的权重按比例分给其余指标，避免直接空值。
+ * 就绪度评分（0-100）：《次日进场就绪度评分卡》的看板实现，回测验证口径。
+ *
+ * 第 0 步 · 趋势模板闸门（米勒维尼 8 条，任一不过 = 出局，score 记 null）：
+ *   ① 站上 150/200 日线  ② 150 > 200 日线  ③ 200 日线 20 日内上行
+ *   ④ 50 日线为最强均线（> 150 且 > 200）  ⑤ 站上 50 日线
+ *   ⑥ 收盘 ≥ 52 周低点 × 1.3  ⑦ 收盘 ≤ 52 周高点 × 1.25
+ *   ⑧ RS 代理：250 日动量 > 0 且 RSI(14) ≥ 55（截面 RS 分位无法单股计算，用此近似并在悬停中注明）
+ *
+ * 过闸后按三模块打分（原始满分 65，归一化 = 原始分 / 65 × 100）：
+ *   A 形态收缩 25：10日振幅/60日振幅 ≤0.5 得 10（≤0.7 得 5）；收盘距 10 日收盘高点
+ *                 ≤5% 得 8（≤8% 得 4）；5日均量/50日均量 ≤0.6 得 7（≤0.8 得 3）
+ *   B 距枢轴   25：距前 20 日最高价 ≤2% 得 25（≤5% 得 15、≤10% 得 8）
+ *   C 量价     15：当日量 ≤ 0.7×50日均量 得 8；近 3 日无「跌 4%+1.5 倍量」得 7
+ *
+ * 档位：≥80 高就绪 ｜ 65~79 中就绪 ｜ 50~64 低就绪 ｜ <50 观察。
+ * 与回测的差异：板块宽度（D）与催化剂（E）在看板单股口径下不可计算，不计分（回测中归一化分母已按实际可得模块校准）；
+ * 大盘 M 系数属于进场时机闸门，由看板「动能定调 / 大盘状态」另行提示，不折算进个股分。
  */
 function momentumScore(metrics) {
-  if (!metrics) return null;
+  if (!metrics || metrics.young) return null;
+  const c = Number(metrics.close);
+  const ma50 = Number(metrics.ma50);
+  const ma150 = Number(metrics.ma150);
+  const ma200 = Number(metrics.ma200);
+  const high52 = Number(metrics.high52);
+  const low52 = Number(metrics.low52);
   const rsi = Number(metrics.rsi14);
-  if (!Number.isFinite(rsi)) return null;
-  const close = Number(metrics.close);
-  const kdj = metrics.kdj || null;
-  const macd = metrics.macd || null;
-  const rsiScore = clamp(rsi <= 70 ? rsi : 140 - rsi, 0, 100);
-  const kdjScore = kdj && Number.isFinite(Number(kdj.k)) && Number.isFinite(Number(kdj.d))
-    ? clamp(50 + (Number(kdj.k) - Number(kdj.d)) * 1.5 + (Number(kdj.k) - 50) * 0.5
-      - (Number(kdj.j) > 100 ? 10 : 0) - (Number(kdj.j) < 0 ? 10 : 0), 0, 100) : null;
-  const macdScore = macd && Number.isFinite(Number(macd.dif)) && Number.isFinite(Number(macd.dea)) && Number.isFinite(close) && close > 0
-    ? clamp(50 + (Number(macd.dif) - Number(macd.dea)) / close * 100 * 10
-      + (Number(macd.dif) > 0 ? 12 : -12) + (macd.turning === '走强' ? 6 : -6), 0, 100) : null;
-  const parts = [];
-  if (rsiScore !== null) parts.push([rsiScore, 0.3]);
-  if (kdjScore !== null) parts.push([kdjScore, 0.3]);
-  if (macdScore !== null) parts.push([macdScore, 0.4]);
-  if (!parts.length) return null;
-  const wsum = parts.reduce(function (a, x) { return a + x[1]; }, 0);
-  const score = parts.reduce(function (a, x) { return a + x[0] * x[1]; }, 0) / wsum;
+  const slope200 = Number(metrics.slope200);
+  const ret250 = Number(metrics.ret250);
+  if (![c, ma50, ma150, ma200, high52, low52, rsi].every(Number.isFinite)) return null;
+  if (high52 <= 0 || low52 <= 0) return null;
+
+  // ---- 趋势模板 8 条闸门 ----
+  const gates = [
+    { name: '站上150/200日线', ok: c > ma150 && c > ma200 },
+    { name: '150日线>200日线', ok: ma150 > ma200 },
+    { name: '200日线上行', ok: Number.isFinite(slope200) && slope200 > 0 },
+    { name: '50日线为最强', ok: ma50 > ma150 && ma50 > ma200 },
+    { name: '站上50日线', ok: c > ma50 },
+    { name: '距52周低点≥30%', ok: c >= low52 * 1.3 },
+    { name: '距52周高点≤25%', ok: c <= high52 * 1.25 },
+    { name: 'RS代理(250日动量>0且RSI≥55)',
+      ok: Number.isFinite(ret250) && ret250 > 0 && rsi >= 55 },
+  ];
+  const pass = gates.every(function (g) { return g.ok; });
+
+  // ---- 三模块打分 ----
+  const rdy = metrics.readiness || {};
+  const rngRatio = Number(rdy.rngRatio);
+  const dist10High = Number(rdy.dist10High);
+  const vol5v50 = Number(rdy.vol5v50);
+  const distPivot = Number(rdy.distPivot);
+  const volDayV50 = Number(rdy.volDayV50);
+  const pivot20 = rdy.pivot20;
+
+  const aRng = Number.isFinite(rngRatio) ? (rngRatio <= 0.5 ? 10 : rngRatio <= 0.7 ? 5 : 0) : null;
+  const aHigh = Number.isFinite(dist10High) ? (dist10High <= 0.05 ? 8 : dist10High <= 0.08 ? 4 : 0) : null;
+  const aVol = Number.isFinite(vol5v50) ? (vol5v50 <= 0.6 ? 7 : vol5v50 <= 0.8 ? 3 : 0) : null;
+  const aPts = [aRng, aHigh, aVol].every(function (x) { return x !== null; })
+    ? aRng + aHigh + aVol : null;
+
+  const bPts = Number.isFinite(distPivot) ? (distPivot <= 0.02 ? 25 : distPivot <= 0.05 ? 15 : distPivot <= 0.10 ? 8 : 0) : null;
+  const cDry = Number.isFinite(volDayV50) ? (volDayV50 <= 0.7 ? 8 : 0) : null;
+  const cPanic = rdy.noPanic === undefined || rdy.noPanic === null ? null : (rdy.noPanic ? 7 : 0);
+  const cPts = cDry === null || cPanic === null ? null : cDry + cPanic;
+
+  const parts = [aPts, bPts, cPts];
+  const allScored = parts.every(function (x) { return x !== null; });
+  const raw = allScored ? aPts + bPts + cPts : null;
+  const MAX_RAW = 65;
+  const score = pass && raw !== null ? Math.round(raw / MAX_RAW * 100) : null;
+  const tier = score === null ? null
+    : score >= 80 ? 'high' : score >= 65 ? 'mid' : score >= 50 ? 'low' : 'watch';
+  const tierLabel = tier === 'high' ? '高就绪' : tier === 'mid' ? '中就绪' : tier === 'low' ? '低就绪' : '观察';
+
   return {
-    score: Math.round(score),
+    score: score,
+    pass: pass,
+    raw: raw,
+    maxRaw: MAX_RAW,
+    tier: tier,
+    tierLabel: tierLabel,
+    gates: gates,
+    failedGates: gates.filter(function (g) { return !g.ok; }).map(function (g) { return g.name; }),
+    a: { score: aPts, rngRatio: rngRatio, dist10High: dist10High, vol5v50: vol5v50 },
+    b: { score: bPts, pivot: pivot20, distPivot: distPivot },
+    c: { score: cPts, volDayV50: volDayV50, noPanic: rdy.noPanic },
+    // 兼容旧展示层的小字段
     rsi: round(rsi, 1),
     rsiState: rsi >= 70 ? '超买' : rsi <= 30 ? '超卖' : '中性',
-    rsiScore: Math.round(rsiScore),
-    kdj: kdjScore === null ? null : { k: kdj.k, d: kdj.d, j: kdj.j, cross: kdj.cross, score: Math.round(kdjScore),
-      state: Number(kdj.j) > 100 ? '超买' : Number(kdj.j) < 0 ? '超卖' : '中性' },
-    macd: macdScore === null ? null : { dif: macd.dif, dea: macd.dea, hist: macd.hist, cross: macd.cross, turning: macd.turning,
-      score: Math.round(macdScore), state: Number(macd.dif) > 0 ? '零轴上' : '零轴下' },
+    kdj: metrics.kdj || null,
+    macd: metrics.macd || null,
   };
 }
 
@@ -282,7 +338,7 @@ function compute(daily) {
       const pc = w[i - 1].c;
       youngRecent.push([w[i].day, round(w[i].c, 2), pc ? round((w[i].c / pc - 1) * 100, 2) : null]);
     }
-    return { kind: 'daily', ver: 4, young: true, bars: w.length, day: last0.day, close: round(last0.c, 2),
+    return { kind: 'daily', ver: 5, young: true, bars: w.length, day: last0.day, close: round(last0.c, 2),
       macd: macdOf(w.map(function (x) { return x.c; })), kdj: kdjOf(w), recent: youngRecent };
   }
   const closes = w.map(function (x) { return x.c; });
@@ -297,6 +353,8 @@ function compute(daily) {
   const ma10 = maBack(10, 0);
   const ma50 = maBack(50, 0);
   const ma120 = maBack(120, 0);
+  const ma150 = maBack(150, 0);
+  const ma200 = maBack(200, 0);
   const ma250 = maBack(250, 0);
   const slopeOf = function (n, back) {
     const now = maBack(n, 0);
@@ -340,7 +398,48 @@ function compute(daily) {
 
   const slope20 = slopeOf(20, 5);
   const slope50 = slopeOf(50, 5);
+  // 200 日线 20 日变化（趋势模板第 3 条：长期均线应当上行）
+  const slope200 = maBack(200, 0) !== null && maBack(200, 20) !== null ? maBack(200, 0) - maBack(200, 20) : null;
+  // 250 日动量（RS 相对强弱的个股代理，截面分位无法单股计算）
+  const ret250 = closes.length >= 251 ? (closes[closes.length - 1] / closes[closes.length - 251] - 1) * 100 : null;
   const chgPct = prev && prev.c ? (last.c / prev.c - 1) * 100 : null;
+
+  // ---- 就绪度评分输入（与《次日进场就绪度评分卡》口径一致）----
+  // 枢轴 = 前 20 日最高价（不含当日）；振幅收缩比 = 10 日振幅 / 60 日振幅；
+  // 距 10 日收盘高点；5 日均量 / 50 日均量；当日量 / 50 日均量；近 3 日是否放量急跌。
+  let readiness = null;
+  if (w.length >= 60) {
+    const last10 = w.slice(-10);
+    const last60 = w.slice(-60);
+    const hi10 = Math.max.apply(null, last10.map(function (x) { return x.h; }));
+    const lo10 = Math.min.apply(null, last10.map(function (x) { return x.l; }));
+    const hi60 = Math.max.apply(null, last60.map(function (x) { return x.h; }));
+    const lo60 = Math.min.apply(null, last60.map(function (x) { return x.l; }));
+    const rngRatio = hi60 > lo60 ? (hi10 - lo10) / (hi60 - lo60) : null;
+    const hh10c = Math.max.apply(null, last10.map(function (x) { return x.c; }));
+    const dist10High = hh10c > 0 ? (hh10c - last.c) / hh10c : null;
+    const pivot20 = w.length >= 21
+      ? Math.max.apply(null, w.slice(-21, -1).map(function (x) { return x.h; })) : null;
+    const distPivot = pivot20 && pivot20 > 0 ? pivot20 / last.c - 1 : null;
+    const v50 = mean(w.slice(-50).map(function (x) { return x.v; }));
+    const v5 = mean(w.slice(-5).map(function (x) { return x.v; }));
+    const vol5v50 = v50 > 0 ? v5 / v50 : null;
+    const volDayV50 = v50 > 0 ? last.v / v50 : null;
+    let panic = false;
+    for (let k = Math.max(1, w.length - 3); k < w.length; k++) {
+      const rr = w[k - 1].c ? w[k].c / w[k - 1].c - 1 : 0;
+      if (rr <= -0.04 && v50 > 0 && w[k].v >= 1.5 * v50) { panic = true; break; }
+    }
+    readiness = {
+      pivot20: round(pivot20, 2),
+      distPivot: distPivot === null ? null : round(distPivot, 4),
+      rngRatio: rngRatio === null ? null : round(rngRatio, 3),
+      dist10High: dist10High === null ? null : round(dist10High, 4),
+      vol5v50: vol5v50 === null ? null : round(vol5v50, 3),
+      volDayV50: volDayV50 === null ? null : round(volDayV50, 3),
+      noPanic: !panic,
+    };
+  }
 
   // 保留最近 30 个交易日的收盘与当日涨幅，用于按新闻日期算 T+0 ~ T+5
   const recent = [];
@@ -351,7 +450,7 @@ function compute(daily) {
 
   return {
     kind: 'daily',
-    ver: 4,
+    ver: 5,
     day: last.day,
     bars: w.length,
     close: round(last.c, 2),
@@ -365,9 +464,14 @@ function compute(daily) {
     ma20: round(ma20, 2),
     ma50: round(ma50, 2),
     ma120: round(ma120, 2),
+    ma150: round(ma150, 2),
+    ma200: round(ma200, 2),
     ma250: round(ma250, 2),
     slope20: round(slope20, 3),
     slope50: round(slope50, 3),
+    slope200: round(slope200, 3),
+    ret250: round(ret250, 2),
+    readiness: readiness,
     volRatio: round(volRatio, 2),
     rsi14: round(rsi, 1),
     macd: macd,
@@ -526,7 +630,7 @@ function isFresh(record, hours, latestDay) {
   // 失败记录 1 小时后重试，避免偶尔的接口抖动把某只股票长期钉在“取不到”
   if (record.error) return age < 3600000;
   // 旧版本按周线/旧均线组合计算，指标口径变更后自动作废重算
-  if (!record.metrics || record.metrics.kind !== 'daily' || record.metrics.ver !== 4) return false;
+  if (!record.metrics || record.metrics.kind !== 'daily' || record.metrics.ver !== 5) return false;
   // 早期记录没有 recent（T+0~T+5 用的日线窗口）：作废重算一次
   if (!Array.isArray(record.metrics.recent) || !record.metrics.recent.length) return false;
   // 走了兜底数据源（约 200 根，缺 250 日均线）的记录 2 小时后重试，新浪恢复后自动升级

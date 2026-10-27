@@ -643,9 +643,11 @@ function newsBoardHtml(rows, opts) {
       : '<span class="mk-k">' + esc(t.name) + '</span>';
     const avg = t.avgPct === null || t.avgPct === undefined ? '—' : mkPct(t.avgPct);
     const time = t.latestTime ? String(t.latestTime).slice(11, 16) : '';
-    const momHtml = score === null
-      ? '<span class="mk-p" title="RSI / KDJ / MACD 数据不足">动能 —</span>'
-      : '<span class="mk-p ' + mkCls(score - 50) + '" title=' + Q + esc(momentumText(t.mom)) + Q + '>动能 ' + score + '</span>';
+    const momHtml = !t.mom
+      ? '<span class="mk-p" title="日线数据不足">就绪 —</span>'
+      : score === null
+        ? '<span class="mk-p" title=' + Q + esc(momentumText(t.mom)) + Q + '>闸门未过</span>'
+        : '<span class="mk-p ' + mkCls(score - 50) + '" title=' + Q + esc(momentumText(t.mom)) + Q + '>就绪 ' + score + '</span>';
     return '<div class="mk-row"><span class="mk-rank' + (i < 3 ? ' top' : '') + '">' + (i + 1) + '</span>' +
       nameHtml +
       '<span class="mk-meta">' + (time ? time + ' · ' : '') + t.n + ' 条</span>' +
@@ -653,9 +655,9 @@ function newsBoardHtml(rows, opts) {
       '<span class="mk-fund">新闻日均 ' + avg + '</span></div>';
   }).join('');
   const newMeta = opts.boardNewMeta || {};
-  const newTitle = '实时更新股票（排除龙虎榜，按动能排序）' + (newMeta.day ? ' · ' + newMeta.day : '');
+  const newTitle = '实时更新股票（排除龙虎榜，按就绪度排序）' + (newMeta.day ? ' · ' + newMeta.day : '');
   const newBody = newStockRows || '<div class="mkt-note">本轮暂无满足条件的新更新股票。</div>';
-  // 看板与明细页共用 cli.js 传来的同一份「按动能排序」名单；没有传（如本地只导表）时退回按平均涨幅
+  // 看板与明细页共用 cli.js 传来的同一份「按就绪度排序」名单；没有传（如本地只导表）时退回按平均涨幅
   const useMomentum = !!(opts.boardStocks && opts.boardStocks.length);
   const stockRows = (useMomentum ? opts.boardStocks.slice(0, 8) : byAvg(stock, 8)).map(function (t, i) {
     const code = t.code || Array.from(t.stocks || [])[0] || '';
@@ -666,9 +668,11 @@ function newsBoardHtml(rows, opts) {
     if (!useMomentum) return cells(t, i, nameHtml, t.n + ' 条');
     const mom = t.mom;
     const score = mom && mom.score !== undefined && mom.score !== null ? mom.score : null;
-    const momHtml = score === null
-      ? '<span class="mk-p" title="RSI / KDJ / MACD 数据不足">动能 —</span>'
-      : '<span class="mk-p ' + mkCls(score - 50) + '" title=' + Q + esc(momentumText(mom)) + Q + '>动能 ' + score + '</span>';
+    const momHtml = !mom
+      ? '<span class="mk-p" title="日线数据不足">就绪 —</span>'
+      : score === null
+        ? '<span class="mk-p" title=' + Q + esc(momentumText(mom)) + Q + '>闸门未过</span>'
+        : '<span class="mk-p ' + mkCls(score - 50) + '" title=' + Q + esc(momentumText(mom)) + Q + '>就绪 ' + score + '</span>';
     return '<div class="mk-row"><span class="mk-rank' + (i < 3 ? ' top' : '') + '">' + (i + 1) + '</span>' +
       nameHtml +
       '<span class="mk-meta">' + t.n + ' 条 · 上涨占比 ' + boardWin(t) + '</span>' +
@@ -691,7 +695,9 @@ function newsBoardHtml(rows, opts) {
     '<section class="mkt">',
     '<div class="mkt-hd"><strong>财联社新闻股票看板</strong><span class="mkt-sub">' +
       '涨幅 = 该股在新闻当日的涨跌幅 ｜ 当日上涨占比 = 新闻当日上涨记录占比（不是前瞻胜率） ｜ 一行为一条「新闻 × 股票」 ｜ ' +
-      '动能 = RSI(14)×30% + KDJ(9,3,3)×30% + MACD(12,26,9)×40%（各指标先折算成 0-100：RSI 70 以上按超买回落，KDJ 按 K/D 金叉强度与 J 超买超卖，MACD 按柱状强度与零轴位置；鼠标悬停看分解）</span></div>',
+      '就绪度 = 趋势模板 8 条闸门（任一不过即出局，显示「闸门未过」）+ 形态收缩 25 分 + 距枢轴 25 分 + 量价 15 分（原始分/65×100）：' +
+      '≥80 高就绪、65~79 中就绪、50~64 低就绪；距枢轴 = 距前 20 日最高价的涨幅；鼠标悬停看逐条分解。' +
+      '口径说明与回测验证见《就绪度评分 A 股回测报告》</span></div>',
     summary,
     '<div class="mkt-grid">',
     '<div class="mkt-box"><div class="mkt-h">最热题材 / 板块（按提及次数）</div><div class="mkt-list">' + topicRows + '</div></div>',
@@ -699,8 +705,8 @@ function newsBoardHtml(rows, opts) {
     '<div class="mkt-box"><div class="mkt-h">各栏目当日上涨占比（样本 ≥ 20）</div><div class="mkt-list">' + winRowsHtml + '</div></div>',
     '<div class="mkt-box mkt-wide"><div class="mkt-note">基准对照：未计算（当前流程没有同窗口全市场历史行情，暂不使用不匹配区间的基准冒充同期对照）。以上涨幅、上涨占比和栏目排序均为描述性统计，不能直接视为买入后的胜率或超额收益。</div></div>',
     '<div class="mkt-box mkt-wide"><div class="mkt-h">' + esc(newTitle) + '</div><div class="mkt-list">' + newBody + '</div>' +
-      '<div class="mkt-note">实时口径：随每轮新闻抓取和页面发布重算；本轮更新于 ' + esc(newMeta.updatedAt || '—') + '。取当前表格中最新新闻日的股票记录；所有前缀或标题含“龙虎榜”的记录已排除。共 ' + (newMeta.count || 0) + ' 只，动能分为 RSI(14)×30% + KDJ(9,3,3)×30% + MACD(12,26,9)×40%。</div></div>',
-    '<div class="mkt-box"><div class="mkt-h">个股表现（' + (useMomentum ? '按动能排序' : '按平均涨幅') + '）' +
+      '<div class="mkt-note">实时口径：随每轮新闻抓取和页面发布重算；本轮更新于 ' + esc(newMeta.updatedAt || '—') + '。取当前表格中最新新闻日的股票记录；所有前缀或标题含“龙虎榜”的记录已排除。共 ' + (newMeta.count || 0) + ' 只，按就绪度评分排序（趋势模板 8 条闸门 + 形态收缩/距枢轴/量价三模块）。</div></div>',
+    '<div class="mkt-box"><div class="mkt-h">个股表现（' + (useMomentum ? '按就绪度排序' : '按平均涨幅') + '）' +
       (opts.boardHref
         ? ' <a href=' + Q + esc(opts.boardHref) + Q + ' title=' + Q + '按添加日期查看这些个股的当日与 T+1~T+5 表现' + Q +
           ' style=' + Q + 'margin-left:auto;color:#1257a8;font-weight:600;white-space:nowrap' + Q + '>明细表 →</a>'
@@ -774,35 +780,55 @@ const NAV_GROUPS = [
 
 const NAV_CSS = '.nav{display:flex;flex-wrap:wrap;gap:.5em 1.1em;align-items:center;background:#fff;border:1px solid #e3e8ef;border-radius:.8em;padding:.6em .8em;margin:0 0 1.1em;font-size:12.5px;box-shadow:0 1px 2px rgba(16,24,40,.04)}.nav-g{display:flex;flex-wrap:wrap;align-items:center;gap:.4em}.nav-g i{color:#8a929e;font-style:normal;font-weight:700}.nav-g a{display:inline-block;padding:.2em .62em;border:1px solid #d6e4ea;border-radius:999px;background:#f8fbfc;color:#155e75;text-decoration:none;white-space:nowrap}.nav-g a:hover{background:#e6f6f8;border-color:#9fd3dd}body.mk-phone .nav{font-size:26px}@media (max-width:760px){.nav{gap:.45em .8em;padding:.55em .6em}.nav-g{gap:.3em}}';
 
-/** 动能分的可读分解：用于看板行内提示（悬停）与明细页小字。 */
+/** 就绪度分的可读分解：用于看板行内提示（悬停）与明细页小字。 */
 function momentumText(mom) {
-  if (!mom || mom.score === undefined || mom.score === null) return '动能分：RSI / KDJ / MACD 数据不足';
-  const p = ['动能 ' + mom.score + '（0-100）'];
-  if (mom.rsi !== null && mom.rsi !== undefined) {
-    p.push('RSI(14) ' + mom.rsi + '（' + (mom.rsiState || '') + '）×30% = ' + mom.rsiScore);
+  if (!mom || mom.score === undefined || mom.score === null) {
+    if (mom && Array.isArray(mom.failedGates) && mom.failedGates.length) {
+      return '就绪度：趋势模板闸门未过（' + mom.failedGates.join('、') + '）——按规则出局，不参与就绪排序';
+    }
+    return '就绪度：日线数据不足（等下一轮补齐）';
   }
-  if (mom.kdj) {
-    p.push('KDJ(9,3,3) K' + mom.kdj.k + '/D' + mom.kdj.d + '/J' + mom.kdj.j + '（' + mom.kdj.cross +
-      (mom.kdj.state && mom.kdj.state !== '中性' ? '·' + mom.kdj.state : '') + '）×30% = ' + mom.kdj.score);
+  const p = ['就绪度 ' + mom.score + '（' + mom.tierLabel + '）｜ 模板闸门 8 条' + (mom.pass ? '全过' : '未过') +
+    '，原始分 ' + mom.raw + '/' + mom.maxRaw];
+  const a = mom.a || {};
+  if (a.score !== null && a.score !== undefined) {
+    p.push('A 形态收缩 ' + a.score + '/25（振幅比 ' + num2(a.rngRatio) + '、距10日高点 ' + num2pct(a.dist10High) +
+      '%、量枯竭比 ' + num2(a.vol5v50) + '）');
   }
-  if (mom.macd) {
-    p.push('MACD(12,26,9) DIF' + mom.macd.dif + '/DEA' + mom.macd.dea + '（' + mom.macd.cross + '·' +
-      mom.macd.turning + '·' + mom.macd.state + '）×40% = ' + mom.macd.score);
+  const b = mom.b || {};
+  if (b.score !== null && b.score !== undefined) {
+    p.push('B 距枢轴 ' + b.score + '/25（前20日高点 ' + (b.pivot === null || b.pivot === undefined ? '—' : b.pivot) +
+      '，距枢轴 +' + num2pct(b.distPivot) + '%）');
   }
+  const c = mom.c || {};
+  if (c.score !== null && c.score !== undefined) {
+    p.push('C 量价 ' + c.score + '/15（当日量/50日均量 ' + num2(c.volDayV50) +
+      (c.noPanic ? '，近3日无放量急跌' : '，近3日有放量急跌') + '）');
+  }
+  if (Array.isArray(mom.gates)) {
+    const bad = mom.gates.filter(function (g) { return !g.ok; }).map(function (g) { return g.name; });
+    if (bad.length) p.push('未过闸门：' + bad.join('、'));
+  }
+  p.push('RS代理：RSI(14) ' + mom.rsi + '（' + (mom.rsiState || '') + '）');
   return p.join(' ｜ ');
 }
 
-/** 明细页小字：动能 84 · RSI 93.2（超买）· KDJ 金叉 · MACD 金叉 */
+/** 明细页小字：就绪 82·高就绪 · 距枢轴 +1.2% · 模板全过 */
 function momentumBrief(mom) {
-  if (!mom || mom.score === undefined || mom.score === null) return '';
-  const p = ['动能 ' + mom.score];
-  if (mom.rsi !== null && mom.rsi !== undefined) {
-    p.push('RSI ' + mom.rsi + (mom.rsiState && mom.rsiState !== '中性' ? '（' + mom.rsiState + '）' : ''));
+  if (!mom || mom.score === undefined || mom.score === null) {
+    if (mom && Array.isArray(mom.failedGates) && mom.failedGates.length) return '闸门未过（' + mom.failedGates.length + ' 条）';
+    return '';
   }
-  if (mom.kdj) p.push('KDJ ' + mom.kdj.cross);
-  if (mom.macd) p.push('MACD ' + mom.macd.cross);
+  const p = ['就绪 ' + mom.score + '·' + mom.tierLabel, '模板' + (mom.pass ? '全过' : '未过')];
+  const b = mom.b || {};
+  if (b.distPivot !== null && b.distPivot !== undefined) p.push('距枢轴 +' + num2pct(b.distPivot) + '%');
+  const a = mom.a || {};
+  if (a.vol5v50 !== null && a.vol5v50 !== undefined) p.push(a.vol5v50 <= 0.6 ? '量枯竭' : '量能一般');
   return p.join(' · ');
 }
+
+function num2(v) { return v === null || v === undefined || !Number.isFinite(Number(v)) ? '—' : Number(v).toFixed(2); }
+function num2pct(v) { return v === null || v === undefined || !Number.isFinite(Number(v)) ? '—' : (Number(v) * 100).toFixed(1); }
 
 function navHtml(opts) {
   if (opts && opts.nav === false) return '';

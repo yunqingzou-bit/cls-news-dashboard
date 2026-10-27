@@ -174,7 +174,7 @@ function siteLinks() { return process.argv.includes('--site-links'); }
       console.log('明星看点：本轮生成失败（' + String((e && e.message) || e) + '），本轮不显示');
     }
   }
-  // 新闻看板「个股表现」：按 5 日动能排序（看板模块与明细页用同一份顺序）
+  // 新闻看板「个股表现」：按就绪度评分排序（看板模块与明细页用同一份顺序）
   let boardStocks = [];
   let boardNewStocks = [];
   let boardNewMeta = { day: '', count: 0, updatedAt: '' };
@@ -189,8 +189,8 @@ function siteLinks() { return process.argv.includes('--site-links'); }
         return s;
       });
       boardStocks = pool
-        // 三个指标齐全的才参与排序：只有 RSI 的记录（旧缓存 / 新上市）和三项齐全的分值不可比
-        .filter(function (s) { return s.mom && s.mom.macd && s.mom.kdj && s.mom.score !== null && s.mom.score !== undefined; })
+        // 过了趋势模板闸门且三模块可打分的才参与排序：闸门未过的按规则出局，不进就绪榜
+        .filter(function (s) { return s.mom && s.mom.score !== null && s.mom.score !== undefined; })
         .sort(function (a, b) {
           const av = a.nn ? a.sum / a.nn : -999;
           const bv = b.nn ? b.sum / b.nn : -999;
@@ -198,7 +198,7 @@ function siteLinks() { return process.argv.includes('--site-links'); }
         })
         .slice(0, Math.max(1, Number((cfg.outlook && cfg.outlook.boardStocks) || 8)));
       // 本轮新更新股票：取当前表格中最新新闻日，排除所有前缀/标题含“龙虎榜”的记录。
-      // 仍沿用同一批股票的 RSI/KDJ/MACD 动能分，避免“新更新”栏目与个股表现排序口径不一致。
+      // 仍沿用同一批股票的就绪度评分，避免“新更新”栏目与个股表现排序口径不一致。
       const newsDay = function (r) {
         const t = String((r && r.time) || '');
         if (/^\d{4}-\d{2}-\d{2}/.test(t)) return t.slice(0, 10);
@@ -228,7 +228,7 @@ function siteLinks() { return process.argv.includes('--site-links'); }
         if (full && full.mom) a.mom = full.mom;
       });
       boardNewStocks = Array.from(freshMap.values())
-        .filter(function (s) { return s.mom && s.mom.macd && s.mom.kdj && s.mom.score !== null && s.mom.score !== undefined; })
+        .filter(function (s) { return s.mom && s.mom.score !== null && s.mom.score !== undefined; })
         .map(function (s) { s.avgPct = s.nn ? s.sum / s.nn : null; return s; })
         .sort(function (a, b) { return (b.mom.score - a.mom.score) || ((b.avgPct === null ? -999 : b.avgPct) - (a.avgPct === null ? -999 : a.avgPct)) || (b.n - a.n); })
         .slice(0, Math.max(1, Number((cfg.outlook && cfg.outlook.boardNewStocks) || 12)));
@@ -239,9 +239,11 @@ function siteLinks() { return process.argv.includes('--site-links'); }
         updatedAt: new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false }),
       };
       const bo = await outlook.runBoard(boardStocks, { config: cfg, newsRows: rows, siteLinks: siteLinks(), backHref: siteLinks() ? '../' : '' });
-      console.log('新闻看板个股：动能排序 ' + boardStocks.length + ' 只（池 ' + pool.length + ' 只，指标齐全 ' +
-        pool.filter(function (s) { return s.mom && s.mom.macd && s.mom.kdj; }).length + ' 只，首位 ' +
-        (boardStocks[0] ? boardStocks[0].name + ' 动能 ' + boardStocks[0].mom.score + '（RSI ' + boardStocks[0].mom.rsi + ' / KDJ ' + (boardStocks[0].mom.kdj ? boardStocks[0].mom.kdj.cross : '—') + ' / MACD ' + (boardStocks[0].mom.macd ? boardStocks[0].mom.macd.cross : '—') + '）' : '—') + '）｜ 留档 ' + bo.days +
+      console.log('新闻看板个股：就绪度排序 ' + boardStocks.length + ' 只（池 ' + pool.length + ' 只，过闸可打分 ' +
+        pool.filter(function (s) { return s.mom && s.mom.score !== null && s.mom.score !== undefined; }).length + ' 只，首位 ' +
+        (boardStocks[0] ? boardStocks[0].name + ' 就绪 ' + boardStocks[0].mom.score + '（' + boardStocks[0].mom.tierLabel +
+          '，距枢轴 ' + (boardStocks[0].mom.b && boardStocks[0].mom.b.distPivot !== null && boardStocks[0].mom.b.distPivot !== undefined
+            ? (boardStocks[0].mom.b.distPivot * 100).toFixed(1) + '%' : '—') + '）' : '—') + '）｜ 留档 ' + bo.days +
         ' 个添加日 ｜ 明细 ' + bo.rows + ' 行 ｜ T+1 已到位 ' + bo.t1 + ' 只 ｜ ' + (bo.skipped ? '本轮未新增（' + bo.skipped + '）' : '本轮新增 ' + bo.added + ' 只'));
     } catch (e) {
       console.log('新闻看板个股：本轮生成失败（' + String((e && e.message) || e) + '），页面沿用上一版');

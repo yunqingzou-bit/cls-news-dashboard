@@ -41,8 +41,8 @@ const LISTS = {
   board: {
     id: 'board',
     title: '新闻看板个股表现 · 明细表',
-    lede: '取「财联社新闻股票看板 · 个股表现」里按动能排序选中的个股，逐日留档并跟踪 T+1~T+5。',
-    tipExtra: '板块里的「个股表现」按动能分排序：RSI(14)×30% + KDJ(9,3,3)×30% + MACD(12,26,9)×40%（各指标先折算成 0-100 再按权重合成）；本条明细表记录每天最终选中名单，以及纳入当日之后的表现。',
+    lede: '取「财联社新闻股票看板 · 个股表现」里按就绪度评分排序选中的个股，逐日留档并跟踪 T+1~T+5。',
+    tipExtra: '板块里的「个股表现」按就绪度评分排序：趋势模板 8 条闸门 + 形态收缩 25 分 + 距枢轴 25 分 + 量价 15 分（原始分/65×100，≥80 高就绪、65~79 中就绪、50~64 低就绪）；本条明细表记录每天最终选中名单，以及纳入当日之后的表现。',
     dataFile: path.join(OUT_DIR, 'stocks.json'),
     pageDir: path.join(OUT_DIR, 'stocks'),
     merge: false,
@@ -178,7 +178,7 @@ function saveLog(log, spec) {
   fs.writeFileSync(file, JSON.stringify(log, null, 1), 'utf8');
 }
 
-/** 动能分（0-100）：RSI(14) 30% + KDJ(9,3,3) 30% + MACD(12,26,9) 40%，实现在 technical.js。 */
+/** 就绪度评分（0-100）：趋势模板 8 条闸门 + 形态收缩/距枢轴/量价三模块，实现在 technical.js。 */
 function momentumOf(rec) {
   return technical.momentumScore(rec && rec.metrics);
 }
@@ -531,7 +531,7 @@ function render(result, opts) {
     + '五日平均涨幅 = 已发生的 T+1~T+5 的算术平均。窗口不足（如次新股）会标出「已发生 n/N」，数据取不到显示「—」。'
     + '历史收益按「股票代码 + 添加日期」绑定；新记录的技术面/调研结论在入选时冻结，旧记录若标注「历史快照缺失」，其结论来自当前缓存，仅供参考。'
     + (spec.tipExtra ? esc(spec.tipExtra) + ' ' : '')
-    + '股名下方的「动能」= RSI(14)×30% + KDJ(9,3,3)×30% + MACD(12,26,9)×40%（0-100，鼠标悬停看分解；各指标先折算成 0-100：RSI 70 以上按超买回落，KDJ 按 K/D 金叉强度与 J 超买超卖，MACD 按柱状强度与零轴位置）。'
+    + '股名下方的「就绪」= 就绪度评分（0-100）：趋势模板 8 条闸门（站上150/200日线、150>200、200日线上行、50日线最强、站上50日线、距52周低点≥30%、距52周高点≤25%、RS代理）全过才计分，未过显示「闸门未过」；过闸后按形态收缩 25 分 + 距枢轴 25 分（距前 20 日最高价）+ 量价 15 分，原始分/65×100（鼠标悬停看逐条分解）。'
     + '名单由当日全市场行情推导，属于动量观察名单，不是预测，也不构成投资建议。</div>';
 
   return [
@@ -658,7 +658,7 @@ async function run(card, opts) {
   }));
 }
 
-/** 财联社新闻股票看板 · 个股表现（名单来自 report.boardStocks 按动能排序后的结果）。 */
+/** 财联社新闻股票看板 · 个股表现（名单来自 report.boardStocks 按就绪度排序后的结果）。 */
 async function runBoard(stocks, opts) {
   opts = opts || {};
   const picks = (stocks || []).map(function (s) {

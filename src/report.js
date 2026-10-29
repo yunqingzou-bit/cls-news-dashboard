@@ -472,6 +472,63 @@ function marketCardHtml(card, opts) {
   ].join('\n');
 }
 
+// ---------------- 封板监测（当天行情卡片之后） ----------------
+// 数据来自 src/ztpool.js（东方财富涨停池）：封板 = 此刻股价封在涨停价上；
+// 「第几板」= 连续涨停天数（lbc），反包等特殊形态以 N天M板（zttj）标注。
+function ztSectionHtml(card) {
+  const zt = card && card.ztpool;
+  if (!zt || !zt.list || !zt.list.length) return '';
+  const today = (function () {
+    const p = function (n) { return String(n).padStart(2, '0'); };
+    const d = new Date();
+    return d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate());
+  })();
+  const dateText = zt.date === today ? '今日实时' : String(zt.date || '').replace(/^(\d{4})(\d{4})$/, '$1-$2') + '（收盘名单）';
+  const up2 = zt.list.filter(function (x) { return x.board >= 2; }).length;
+
+  const ladder = (zt.ladder || []).map(function (l) {
+    const cls = l.board >= 4 ? 'hot' : l.board >= 2 ? 'mid' : '';
+    return '<span class=' + Q + 'zt-chip ' + cls + Q + '><b>' + l.board + '板</b> ' + l.count + ' 只</span>';
+  }).join('');
+
+  const rows = zt.list.map(function (x) {
+    const boardCls = x.board >= 4 ? 'hot' : x.board >= 2 ? 'mid' : '';
+    return '<tr>' +
+      '<td><span class=' + Q + 'zt-badge ' + boardCls + Q + '>' + x.board + '板</span>' +
+        (x.daysCt ? '<span class=' + Q + 'zt-days' + Q + '>' + esc(x.daysCt) + '</span>' : '') + '</td>' +
+      '<td><a class=' + Q + 'mk-link' + Q + ' href=' + Q + quoteUrl(x.code) + Q +
+        ' target=' + Q + '_blank' + Q + ' rel=' + Q + 'noopener noreferrer' + Q +
+        ' title=' + Q + '在腾讯行情查看行情与K线' + Q + '>' + esc(x.name) + '</a>' +
+        '<span class=' + Q + 'zt-code' + Q + '>' + esc(x.code) + '</span></td>' +
+      '<td class="num">' + x.px.toFixed(2) + '</td>' +
+      '<td class="num f-up">' + mkPct(x.pct) + '</td>' +
+      '<td class="num">' + (Number.isFinite(x.fundYi) ? x.fundYi.toFixed(2) : '—') + '</td>' +
+      '<td class="num">' + esc(x.fbt) + '</td>' +
+      '<td class="num">' + esc(x.lbt) + '</td>' +
+      '<td class="num' + (x.zbc > 0 ? ' zt-zb' : '') + '">' + x.zbc + '</td>' +
+      '<td class="num">' + (Number.isFinite(x.hs) ? x.hs.toFixed(2) + '%' : '—') + '</td>' +
+      '<td>' + esc(x.hybk || '—') + '</td>' +
+      '<td class="num">' + (Number.isFinite(x.amountYi) ? x.amountYi.toFixed(1) : '—') + '</td>' +
+      '</tr>';
+  }).join('');
+
+  return [
+    '<section class="mkt zt" id="ztpool">',
+    '<div class="mkt-hd"><strong>封板监测</strong><span class="mkt-sub">沪深A股涨停池 ｜ ' + esc(dateText) +
+      ' ｜ 封板 ' + mkInt(zt.count) + ' 只 ｜ 最高 ' + mkInt(zt.maxBoard) + ' 板 ｜ 二板以上 ' + mkInt(up2) +
+      ' 只（按连板数、封单额排序，点名称看行情）</span></div>',
+    '<div class="mkt-box mkt-wide">',
+    '<div class="zt-ladder">' + ladder + '</div>',
+    '<div class="zt-scroll"><table class="zt-table"><thead><tr>' +
+      '<th>连板</th><th>股票</th><th class="num">现价</th><th class="num">涨跌幅</th><th class="num">封单(亿)</th>' +
+      '<th class="num">首次封板</th><th class="num">最后封板</th><th class="num">炸板</th><th class="num">换手</th><th>行业</th><th class="num">成交(亿)</th>' +
+      '</tr></thead><tbody>' + rows + '</tbody></table></div>',
+    '<div class="mkt-note">口径：封板 = 此刻股价封在涨停价上（盘中实时进出，收盘后为当日最终名单）；「N板」= 连续涨停天数即第几个板，反包形态以 N天M板 标注；封单越大封板越稳，炸板次数多说明分歧大。数据来源：东方财富涨停池。</div>',
+    '</div>',
+    '</section>',
+  ].join('\n');
+}
+
 
 // ---------------- 财联社新闻股票看板（当天行情卡片之后、表格之前） ----------------
 // 全部指标都由表格自身的行数据算出，不额外请求网络。
@@ -746,6 +803,7 @@ const CARD_SCRIPT = '<script>' + "(function(){\n  var els = document.querySelect
 
 
 const MARKET_CSS = ".mkt{position:relative;background:linear-gradient(180deg,#fff 0%,#f7f9fc 100%);border:1px solid #e3e8ef;border-radius:1em;padding:1.16em 1.2em 1.2em;margin:0 0 1.3em;box-shadow:0 1px 2px rgba(16,24,40,.04),0 10px 26px -16px rgba(16,24,40,.28);font-size:12.5px}.mkt::before{content:'';position:absolute;left:0;right:0;top:0;height:.26em;border-radius:1em 1em 0 0;background:linear-gradient(90deg,#d93025 0%,#e8873a 46%,#2f9e5f 100%);opacity:.9}.mkt-hd{display:flex;align-items:baseline;gap:.6em;flex-wrap:wrap;margin-bottom:.92em}.mkt-hd strong{font-size:1.26em;letter-spacing:.01em}.mkt-sub{color:#8a929e;font-size:.95em}.mkt-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(19.8em,1fr));gap:.9em}.mkt-box{border:1px solid #eaeef4;border-radius:.72em;padding:.82em .92em .9em;background:#fff;min-width:0}.mkt-wide{grid-column:1/-1}.mkt-h{display:flex;align-items:center;gap:.44em;color:#5b6472;font-size:.95em;font-weight:700;margin-bottom:.62em}.mkt-h::before{content:'';width:.28em;height:.95em;border-radius:.14em;background:#c9d3e0}.mkt-list{display:block}.idx-item{display:flex;align-items:baseline;gap:.5em;padding:.3em .52em;border-radius:.46em;margin-bottom:.26em;background:#f7f9fc}.idx-item:last-child{margin-bottom:0}.idx-item.up{background:linear-gradient(90deg,#fdf1f0,#fff)}.idx-item.down{background:linear-gradient(90deg,#eef8f2,#fff)}.idx-n{color:#414a56;font-weight:600}.idx-v{margin-left:auto;color:#2a3038;font-variant-numeric:tabular-nums}.idx-p{flex:0 0 auto;min-width:4.6em;text-align:center;border-radius:.4em;padding:.08em .3em;font-weight:700;font-variant-numeric:tabular-nums}.idx-item.up .idx-p{background:#fdecea}.idx-item.down .idx-p{background:#e7f6ec}.br-bar{display:flex;height:.52em;border-radius:.26em;overflow:hidden;background:#eef1f5;margin:0 0 .62em}.br-bar i{display:block;height:100%}.br-bar i.up{background:#e05a52}.br-bar i.flat{background:#c8ced8}.br-bar i.down{background:#3aa06a}.mkt-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:.44em}.mk-stat{display:flex;flex-direction:column;align-items:center;gap:.08em;background:#f7f9fc;border:1px solid #eef2f7;border-radius:.5em;padding:.44em .3em}.mk-stat.up{background:#fdf3f2;border-color:#f8dcd9}.mk-stat.down{background:#eef8f2;border-color:#d8ecdf}.mk-stat-n{font-size:1.24em;font-weight:800;line-height:1.24;font-variant-numeric:tabular-nums}.mk-stat-l{color:#8a929e;font-size:.85em}.mkt-note{color:#8a929e;font-size:.9em;margin-top:.62em;line-height:1.6}.mk-row{display:flex;align-items:center;gap:.5em;flex-wrap:wrap;font-size:1em;line-height:1.8;padding:.14em 0;border-bottom:1px dashed #eef1f5}.mk-row:last-child{border-bottom:0}.mk-rank{flex:0 0 auto;min-width:1.5em;height:1.5em;line-height:1.5em;text-align:center;border-radius:.34em;background:#eef2f8;color:#69737f;font-size:.84em;font-weight:700;font-variant-numeric:tabular-nums}.mk-rank.top{background:linear-gradient(135deg,#f0b23c,#e2662f);color:#fff}.mk-k{color:#1f252c;font-weight:700}.mk-meta{color:#8a929e;font-size:.93em}.mk-best{margin-left:auto;color:#4a525c;font-size:.93em}.mk-link{color:#1257a8;text-decoration:none;font-weight:600;max-width:8em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.mk-p{flex:0 0 auto;margin-left:auto;min-width:4.4em;text-align:center;border-radius:.4em;padding:.08em .3em;font-weight:700;font-variant-numeric:tabular-nums}.mk-p.f-up{background:#fdecea}.mk-p.f-down{background:#e7f6ec}.mk-p.f-flat{background:#f1f3f6}.mk-fund{margin-left:.66em;min-width:5em;text-align:right;color:#6b737e;font-size:.93em;font-variant-numeric:tabular-nums}.mkt-hot{display:grid;grid-template-columns:repeat(auto-fit,minmax(16.8em,1fr));gap:.2em 1.5em}.mkt-hot-col{min-width:0}.mkt-hot-h{display:flex;align-items:center;gap:.4em;color:#5b6472;font-size:.9em;font-weight:700;margin:.2em 0 .32em}.mkt-hot-h::before{content:'';width:.34em;height:.34em;border-radius:50%;background:#c9d3e0}.f-flat{color:#6b7280}body.mk-phone .mkt{font-size:28px}";
+const ZT_CSS = ".zt-ladder{display:flex;flex-wrap:wrap;gap:.4em;margin-bottom:.66em}.zt-chip{display:inline-flex;align-items:center;gap:.3em;background:#f7f9fc;border:1px solid #eef2f7;border-radius:.44em;padding:.24em .62em;font-size:.95em;color:#414a56}.zt-chip b{font-weight:800;color:#2a3038}.zt-chip.mid{background:#fff7ef;border-color:#f5e0c8}.zt-chip.mid b{color:#c26a1d}.zt-chip.hot{background:#fdecea;border-color:#f8dcd9}.zt-chip.hot b{color:#c62828}.zt-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}.zt-table{width:100%;border-collapse:collapse;font-size:1em;min-width:46em}.zt-table th{background:#f7f9fc;color:#5b6472;font-weight:700;text-align:left;padding:.4em .52em;border-bottom:1px solid #e3e8ef;white-space:nowrap}.zt-table td{padding:.34em .52em;border-bottom:1px dashed #eef1f5;white-space:nowrap;vertical-align:middle}.zt-table tbody tr:last-child td{border-bottom:0}.zt-table .num{font-variant-numeric:tabular-nums;text-align:right}.zt-badge{display:inline-block;min-width:2.4em;text-align:center;border-radius:.4em;padding:.1em .36em;font-weight:800;background:#eef2f8;color:#69737f;font-variant-numeric:tabular-nums}.zt-badge.mid{background:#fff1e2;color:#c26a1d}.zt-badge.hot{background:#c62828;color:#fff}.zt-days{margin-left:.4em;color:#8a929e;font-size:.9em}.zt-code{margin-left:.4em;color:#b3bac3;font-size:.88em}.zt-zb{color:#c62828;font-weight:700}";
 
 
 const CSS_BASE = "body{font-family:'Microsoft YaHei',system-ui,sans-serif;margin:24px;color:#1c1c1e;background:#fafafa}h1{font-size:20px;margin:0 0 6px}.meta{color:#666;font-size:13px;margin-bottom:16px}.meta a{white-space:nowrap}.hint{color:#888;font-size:12.5px}table{border-collapse:collapse;width:100%;background:#fff;font-size:13px;table-layout:fixed}th,td{border:1px solid #e5e5e5;padding:8px 10px;vertical-align:top;text-align:left;overflow-wrap:anywhere;word-break:break-word}th{background:#f2f3f5;position:sticky;top:0;z-index:2}td.t{white-space:normal;color:#555;font-variant-numeric:tabular-nums}td.txt{line-height:1.6;white-space:pre-wrap}td.src{white-space:nowrap;color:#888;font-size:12px}.pf{display:inline-block;background:#fff1e6;color:#c2410c;border:1px solid #ffd7bd;border-radius:3px;padding:1px 6px;white-space:normal;overflow-wrap:anywhere;word-break:break-word;line-height:1.45;text-align:center}.pl{display:inline-block;background:#eef4fb;color:#1257a8;border:1px solid #cfe0f2;border-radius:3px;padding:1px 6px;white-space:nowrap;font-size:12px;margin:0 3px 2px 0}a{color:#1257a8;text-decoration:none}a:hover{text-decoration:underline}.tw{background:#fff}.load-more{display:block;margin:12px auto;padding:9px 16px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;color:#1257a8;cursor:pointer;font-size:13px}.load-more:hover{background:#eff6ff}" ;
@@ -1276,12 +1334,13 @@ function toHtml(rows, meta, opts) {
     '<!doctype html>',
     '<html lang=' + Q + 'zh-CN' + Q + '><head><meta charset=' + Q + 'utf-8' + Q + '><meta name=' + Q + 'viewport' + Q + ' content=' + Q + viewportContent + Q + '>',
     '<title>财联社栏目新闻 ' + esc(meta.title || '') + '</title>',
-    '<style>' + CSS_BASE + mobileCss + BAR_CSS + EXTRA_CSS + MARKET_CSS + STAR_CSS + BOARD_CSS + MKT_TOGGLE_CSS + SORT_CSS + NAV_CSS + PERF_CSS + MSEL_CSS + '</style></head><body>',
+    '<style>' + CSS_BASE + mobileCss + BAR_CSS + EXTRA_CSS + MARKET_CSS + ZT_CSS + STAR_CSS + BOARD_CSS + MKT_TOGGLE_CSS + SORT_CSS + NAV_CSS + PERF_CSS + MSEL_CSS + '</style></head><body>',
     navHtml(opts),
     '<h1>' + esc(meta.title || '财联社自选股 · 目标栏目新闻') + '</h1>',
     '<div class=' + Q + 'meta' + Q + '>区间 ' + esc(meta.range) + ' ｜ 共 ' + rows.length + ' 条 ｜ 股票池 ' + esc(meta.poolLabel) + ' ｜ 生成于 ' + esc(meta.generatedAt) + links + '</div>',
     hintHtml,
     marketCardHtml(meta.card, opts),
+    ztSectionHtml(meta.card),
     newsBoardHtml(rows, opts),
     toolbar,
     '<div class=' + Q + 'tw' + Q + '><table>' + colgroup + '<thead><tr>' + th + '</tr></thead><tbody id=' + Q + 'newsRows' + Q + '>',
@@ -1373,4 +1432,4 @@ function pruneExports(base, keepSets) {
 
 module.exports = { exportAll: exportAll, toCsv: toCsv, toHtml: toHtml, HEADERS: HEADERS, TEXT_SOURCE_LABEL: TEXT_SOURCE_LABEL, OUT_DIR: OUT_DIR,
   researchHtml: researchHtml, technicalHtml: technicalHtml, outlookShort: outlookShort, boardStocks: boardStocks,
-  momentumText: momentumText, momentumBrief: momentumBrief };
+  momentumText: momentumText, momentumBrief: momentumBrief, ztSectionHtml: ztSectionHtml };

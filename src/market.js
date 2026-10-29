@@ -14,11 +14,13 @@ const path = require('node:path');
 const cls = require('./cls.js');
 const collectMod = require('./collect.js');
 const research = require('./research.js');
+const ztpool = require('./ztpool.js');
 
 const CACHE_FILE = path.join(collectMod.DATA_DIR, 'market.json');
 const TTL_MS = 15 * 60 * 1000;
+const ZT_TTL_MS = 5 * 60 * 1000; // 封板池时效短，独立 5 分钟缓存（不随行情卡片 15 分钟 TTL 变旧）
 // 卡片字段结构变化时递增：版本不一致就重新抓取，避免旧结构缓存渲染出缺字段的卡片
-const CACHE_VERSION = 5;
+const CACHE_VERSION = 6;
 const CONCEPT_TTL_MS = 7 * 24 * 3600 * 1000; // 个股行业/概念变化很慢，缓存 7 天
 const GAINER_SAMPLE = 60; // 用涨幅榜前 N 只聚合领涨行业/主题
 const FUND_SAMPLE = 40;   // 额外取主力资金榜前 N 只的题材，让「明日看点」的板块样本更宽
@@ -313,12 +315,34 @@ function shanghaiText(d) {
   return p(t.getMonth() + 1) + '-' + p(t.getDate()) + ' ' + p(t.getHours()) + ':' + p(t.getMinutes());
 }
 
+/**
+ * 封板监测：东财涨停池（连板数 = 第几个板）。
+ * 独立 5 分钟 TTL 缓存挂在 cache.zt，随 market.json 一起留档；
+ * 抓取失败只影响本栏目（card.ztpool 缺失，页面隐藏该栏目），不影响行情卡片。
+ */
+async function refreshZtPool(card, cache) {
+  try {
+    const hit = cache.zt;
+    if (hit && hit.card && Date.now() - new Date(hit.at).getTime() < ZT_TTL_MS) {
+      card.ztpool = hit.card;
+      return;
+    }
+    const zt = await ztpool.fetchPool();
+    card.ztpool = zt;
+    cache.zt = { at: new Date().toISOString(), card: zt };
+    saveCache(cache); // 把封板池缓存落盘，下一轮进程可直接复用
+  } catch (_) { /* 本轮没取到就不显示封板栏目 */ }
+}
+
 /** 生成（或复用缓存）当天行情卡片数据。 */
 async function summary(opts) {
   opts = opts || {};
   const cache = loadCache();
   if (!opts.force && cache.version === CACHE_VERSION && cache.updatedAt && Date.now() - new Date(cache.updatedAt).getTime() < TTL_MS && cache.card) {
-    return cache.card;
+    const hit = cache.card;
+    // 封板池时效短：即使行情卡片命中缓存，也按自己的 5 分钟 TTL 刷新
+    await refreshZtPool(hit, cache);
+    return hit;
   }
   try {
     const snap = await fetchSnapshot();
@@ -376,6 +400,7 @@ async function summary(opts) {
       sample: gainers.length,
       outlook: outlook,
     };
+    await refreshZtPool(card, cache);
     cache.updatedAt = card.updatedAt;
     cache.version = CACHE_VERSION;
     cache.card = card;
